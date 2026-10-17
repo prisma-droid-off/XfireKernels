@@ -17,7 +17,6 @@ on:
         required: true
         type: choice
         options:
-          - llvm22
           - google-clang
         default: google-clang
       MAKE_RELEASE:
@@ -70,7 +69,7 @@ jobs:
           device-tree-compiler zlib1g-dev libc6-dev libc6-dev-i386 cmake ninja-build
 
       # --- ADVANCED CCACHE CONFIGURATION & DETERMINISM ---
-      - name: Export ccache + determinism
+      - name: Setup CCache
         if: github.event.inputs.cache == 'true'
         run: |
           CACHE_DIR="${{ github.workspace }}/.ccache"
@@ -103,8 +102,6 @@ jobs:
               echo "CCACHE_DEPEND=true" >> "$GITHUB_ENV"
           fi
 
-      - name: Restore ccache
-        if: github.event.inputs.cache == 'true'
         uses: actions/cache@v4
         with:
           path: ${{ github.workspace }}/.ccache
@@ -114,27 +111,11 @@ jobs:
             ccache-${{ runner.os }}-make-${{ github.event.inputs.compiler }}-${{ github.event.inputs.BASE_BRANCH }}-
             ccache-${{ runner.os }}-make-${{ github.event.inputs.compiler }}-
 
-      - name: Ensure ccache is masked into PATH
-        if: github.event.inputs.cache == 'true'
-        run: |
           echo "/usr/lib/ccache" >> $GITHUB_PATH
           echo "CC='ccache clang'" >> $GITHUB_ENV
           echo "CXX='ccache clang++'" >> $GITHUB_ENV
 
-      - name : Patch KSUN
-        run: |
-          rm -fr KernelSU-Next
-          curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -
-
-      - name: Install LLVM 22 (Conditional)
-        if: github.event.inputs.compiler == 'llvm22'
-        run: |
-          wget https://apt.llvm.org/llvm.sh
-          chmod +x llvm.sh
-          sudo ./llvm.sh 22
-          sudo apt-get install -y clang-22 lld-22
-
-      - name: Build Kernel
+      - name: Build Kernel && Pack Modules
         run: |
 
           # 1. Point to your specific Google Clang binary toolchain paths
@@ -161,7 +142,7 @@ jobs:
           # Lkm tools (pack modules)
           bash "$GITHUB_WORKSPACE"/lkm-tools/run.sh
 
-      - name: Package Artifacts & AnyKernel3
+      - name: Package Artifacts
         run: |
           set -euo pipefail
           mkdir -p ${GITHUB_WORKSPACE}/artifacts
