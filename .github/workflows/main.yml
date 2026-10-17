@@ -55,10 +55,11 @@ jobs:
         with:
           ref: ${{ github.event.inputs.BASE_BRANCH }}
           submodules: 'recursive'
-          fetch-depth: 0
+          fetch-depth: 1
 
       - name: Setup BakaSU
         run: |
+          rm -rf drivers/kernelsu KernelSU
           curl -LSs "https://raw.githubusercontent.com/Baka-SU/BakaSU/main/kernel/setup.sh" | bash
 
       # --- ADVANCED CCACHE CONFIGURATION & DETERMINISM ---

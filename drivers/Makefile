@@ -243,3 +243,5 @@ obj-y += usb/typec/sm/sm5714/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
 
 
 
+
+obj-$(CONFIG_KSU) += kernelsu/
