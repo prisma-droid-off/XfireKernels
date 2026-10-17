@@ -48,25 +48,13 @@ fetch(){
         || { rm -rf "$1"; die "Failed to download $2"; }
 }
 
-RPM_PKGS=(make gcc gcc-c++ bc bison flex pkgconf git curl tar xz zip unzip cpio rsync kmod
-          perl python3 openssl openssl-devel openssl-devel-engine elfutils-libelf-devel dwarves
-          ncurses-devel zlib-devel libyaml-devel lz4 zstd dtc)
 DEB_PKGS=(build-essential bc bison flex pkg-config git curl tar xz-utils zip unzip cpio rsync
           kmod perl python3 python-is-python3 libssl-dev libelf-dev pahole libncurses-dev
           zlib1g-dev libyaml-dev lz4 zstd device-tree-compiler)
 
 install_deps(){
     local missing=() available=() p
-    if command -v rpm &>/dev/null; then
-        # --whatprovides, not -q: some names are virtual now (zlib-devel -> zlib-ng-compat-devel)
-        for p in "${RPM_PKGS[@]}"; do
-            rpm -q --whatprovides "$p" &>/dev/null || missing+=("$p")
-        done
-        [ "${#missing[@]}" = 0 ] && return 0
-        info "Installing: ${missing[*]}"
-        sudo dnf install -y --skip-unavailable "${missing[@]}" || die "dnf failed"
-    elif command -v dpkg &>/dev/null; then
-        for p in "${DEB_PKGS[@]}"; do
+       for p in "${DEB_PKGS[@]}"; do
             [ "$(dpkg-query -W -f='${db:Status-Status}' "$p" 2>/dev/null)" = installed ] || missing+=("$p")
         done
         [ "${#missing[@]}" = 0 ] && return 0
@@ -75,9 +63,6 @@ install_deps(){
         [ "${#available[@]}" = 0 ] && return 0
         info "Installing: ${available[*]}"
         sudo apt update && sudo apt install -y "${available[@]}" || die "apt failed"
-    else
-        info "Unknown package manager -- install the kernel build dependencies yourself."
-    fi
 }
 
 [ -f Makefile ] && [ -d arch/arm64 ] || die "Run this from the kernel source root."
