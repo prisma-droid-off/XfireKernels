@@ -59,7 +59,7 @@ jobs:
 
       - name: Setup BakaSU
         run: |
-          rm -rf KernelSU
+          rm -rf drivers/kernelsu KernelSU
           curl -LSs "https://raw.githubusercontent.com/Baka-SU/BakaSU/main/kernel/setup.sh" | bash
 
       # --- ADVANCED CCACHE CONFIGURATION & DETERMINISM ---
