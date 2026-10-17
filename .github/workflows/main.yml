@@ -55,7 +55,7 @@ jobs:
         with:
           ref: ${{ github.event.inputs.BASE_BRANCH }}
           submodules: 'recursive'
-          fetch-depth: 1
+          fetch-depth: 0
 
       # --- ADVANCED CCACHE CONFIGURATION & DETERMINISM ---
       - name: Setup CCache Environment
