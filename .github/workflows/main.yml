@@ -106,7 +106,7 @@ jobs:
             ccache-${{ runner.os }}-make-${{ github.event.inputs.compiler }}-${{ github.event.inputs.BASE_BRANCH }}-
             ccache-${{ runner.os }}-make-${{ github.event.inputs.compiler }}-
 
-- name: Setup BakaSU
+      - name: Setup BakaSU
         run: |
           curl -LSs "https://raw.githubusercontent.com/Baka-SU/BakaSU/main/kernel/setup.sh" | bash -s -- --submodule
 
