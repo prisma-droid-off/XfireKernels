@@ -57,6 +57,11 @@ jobs:
           submodules: 'recursive'
           fetch-depth: 0
 
+      - name: Setup BakaSU
+        run: |
+          rm -rf KernelSU
+          curl -LSs "https://raw.githubusercontent.com/Baka-SU/BakaSU/main/kernel/setup.sh" | bash
+
       # --- ADVANCED CCACHE CONFIGURATION & DETERMINISM ---
       - name: Setup CCache Environment
         if: github.event.inputs.cache == 'true'
@@ -105,10 +110,6 @@ jobs:
             ccache-${{ runner.os }}-make-${{ github.event.inputs.compiler }}-${{ github.event.inputs.BASE_BRANCH }}
             ccache-${{ runner.os }}-make-${{ github.event.inputs.compiler }}-${{ github.event.inputs.BASE_BRANCH }}-
             ccache-${{ runner.os }}-make-${{ github.event.inputs.compiler }}-
-
-      - name: Setup BakaSU
-        run: |
-          curl -LSs "https://raw.githubusercontent.com/Baka-SU/BakaSU/main/kernel/setup.sh" | bash -s -- --submodule
 
       - name: Build Kernel && Pack Modules
         run: |
