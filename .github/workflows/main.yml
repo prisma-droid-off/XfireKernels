@@ -1,0 +1,212 @@
+name: Build Kernel Action
+
+permissions:
+    contents: write
+    discussions: write
+
+on:
+  workflow_dispatch:
+    inputs:
+      cache:
+        description: 'Enable ccache'
+        required: true
+        type: boolean
+        default: true
+      compiler:
+        description: 'Compiler Toolchain'
+        required: true
+        type: choice
+        options:
+          - llvm22
+          - google-clang
+        default: google-clang
+      MAKE_RELEASE:
+        description: 'Create a GitHub Release'
+        required: true
+        type: boolean
+        default: true
+      BASE_BRANCH:
+        description: 'Branch to build'
+        type: string
+        required: false
+        default: main
+
+jobs:
+  build-kernel:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Free Disk Space
+        uses: endersonmenezes/free-disk-space@main
+        with:
+          remove_android: true
+          remove_dotnet: true
+          remove_haskell: true
+          remove_tool_cache: true
+          remove_swap: true
+          remove_packages: "azure-cli google-cloud-cli microsoft-edge-stable google-chrome-stable firefox postgresql* temurin-* *llvm* mysql* dotnet-sdk-*"
+          remove_packages_one_command: true
+          remove_folders: "/usr/share/swift /usr/share/miniconda /usr/share/az* /usr/local/lib/node_modules /usr/local/share/chromium /usr/local/share/powershell /usr/local/julia /usr/local/aws-cli /usr/local/aws-sam-cli /usr/share/gradle"
+          rm_cmd: "rmz"
+          rmz_version: "3.1.1"
+          testing: false
+
+      - name: Checkout Source (Minimal Branch)
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.inputs.BASE_BRANCH }}
+          submodules: 'recursive'
+          fetch-depth: 1
+
+      - name: Install Tools & Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bc bison build-essential flex git lld llvm python3 \
+          git curl wget bc bison flex libssl-dev libelf-dev \
+          py/xthon3 python-is-python3 make gcc gcc-aarch64-linux-gnu \
+          binutils binutils-aarch64-linux-gnu g++ cpio zip unzip \
+          lz4 zstd xz-utils libncurses-dev libncurses5-dev \
+          kmod rsync lld llvm clang dwarves pahole ccache \
+          device-tree-compiler zlib1g-dev libc6-dev libc6-dev-i386 cmake ninja-build
+
+      # --- ADVANCED CCACHE CONFIGURATION & DETERMINISM ---
+      - name: Export ccache + determinism
+        if: github.event.inputs.cache == 'true'
+        run: |
+          CACHE_DIR="${{ github.workspace }}/.ccache"
+          mkdir -p "$CACHE_DIR"
+          SETTINGS=(
+            "CCACHE_DIR=$CACHE_DIR"
+            "CCACHE_MAXSIZE=12G"
+            "CCACHE_COMPILERCHECK=content"
+            "CCACHE_BASEDIR=${GITHUB_WORKSPACE}"
+            "CCACHE_NOHASHDIR=true"
+            "CCACHE_IGNOREOPTIONS=-sysroot* -fdebug-prefix-map=* -fmacro-prefix-map=*"
+            "CCACHE_COMPRESS=true"
+            "CCACHE_COMPRESSLEVEL=8"
+            "CCACHE_DIRECT=true"
+            "CCACHE_FILE_CLONE=true"
+            "CCACHE_INODE_CACHE=true"
+            "CCACHE_IS_KERNEL_COMPILING=true"
+            "CCACHE_UMASK=002"
+            "KBUILD_BUILD_TIMESTAMP=2026-01-01"
+            "CCACHE_SLOPPINESS=file_macro,time_macros,include_file_mtime,include_file_ctime,pch_defines,system_headers,locale,file_stat_matches"
+          )
+
+          for setting in "${SETTINGS[@]}"; do
+            export "$setting"
+            echo "$setting" >> $GITHUB_ENV
+          done
+
+          if ccache --help 2>&1 | grep -q 'depend_mode'; then
+              export CCACHE_DEPEND=true
+              echo "CCACHE_DEPEND=true" >> "$GITHUB_ENV"
+          fi
+
+      - name: Restore ccache
+        if: github.event.inputs.cache == 'true'
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/.ccache
+          key: ccache-${{ runner.os }}-make-${{ github.event.inputs.compiler }}-${{ github.event.inputs.BASE_BRANCH }}-${{ github.run_id }}
+          restore-keys: |
+            ccache-${{ runner.os }}-make-${{ github.event.inputs.compiler }}-${{ github.event.inputs.BASE_BRANCH }}
+            ccache-${{ runner.os }}-make-${{ github.event.inputs.compiler }}-${{ github.event.inputs.BASE_BRANCH }}-
+            ccache-${{ runner.os }}-make-${{ github.event.inputs.compiler }}-
+
+      - name: Ensure ccache is masked into PATH
+        if: github.event.inputs.cache == 'true'
+        run: |
+          echo "/usr/lib/ccache" >> $GITHUB_PATH
+          echo "CC='ccache clang'" >> $GITHUB_ENV
+          echo "CXX='ccache clang++'" >> $GITHUB_ENV
+
+      - name : Patch KSUN
+        run: |
+          rm -fr KernelSU-Next
+          curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -
+
+      - name: Install LLVM 22 (Conditional)
+        if: github.event.inputs.compiler == 'llvm22'
+        run: |
+          wget https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh 22
+          sudo apt-get install -y clang-22 lld-22
+
+      - name: Build Kernel
+        run: |
+
+          # 1. Point to your specific Google Clang binary toolchain paths
+          #export PATH=$(pwd)/toolchain/clang/host/linux-x86/clang-r450784d/bin:$PATH
+          #export PATH=$(pwd)/toolchain/build/kernel/build-tools/path/linux-x86/:$PATH
+          #export CC="ccache clang"
+          #export HOSTCC="ccache clang"
+
+          # Print detailed ccache statistics at end of compile
+          if [ "${{ github.event.inputs.cache }}" = "true" ]; then
+            ccache -s
+          fi
+
+          # Run Build
+          bash "$GITHUB_WORKSPACE"/build.sh
+
+          # Move compiled image to root workspace for easy access
+          if [ -f "build/Image" ]; then
+            cp "$GITHUB_WORKSPACE"/build/Image ./Image
+          else
+            echo "ERRO: Image não encontrada em build/Image"
+            exit 1
+          fi
+          # Lkm tools (pack modules)
+          bash "$GITHUB_WORKSPACE"/lkm-tools/run.sh
+
+      - name: Package Artifacts & AnyKernel3
+        run: |
+          set -euo pipefail
+          mkdir -p ${GITHUB_WORKSPACE}/artifacts
+
+          echo ">>> Cloning AnyKernel3..."
+          git clone --depth=1 https://github.com/prisma-droid-off/AnyKernel3.git ${GITHUB_WORKSPACE}/AnyKernel3
+
+          echo ">>> Copying Kernel Image to AnyKernel3..."
+          if [ -f "${GITHUB_WORKSPACE}/Image" ]; then
+            cp "${GITHUB_WORKSPACE}/Image" "${GITHUB_WORKSPACE}/AnyKernel3/"
+          else
+            echo "[x] Kernel Image not found!"
+            exit 1
+          fi
+
+          echo ">>> Creating Flashable Zip..."
+          cd ${GITHUB_WORKSPACE}/AnyKernel3
+          rm -rf .git README.md
+
+          # Corrected input value matching the top level variable string definition
+          AK3_ZIP_NAME="v${{ github.run_number }}-XFireKernels.zip"
+          zip -r9 "${GITHUB_WORKSPACE}/artifacts/${AK3_ZIP_NAME}" ./*
+          echo "AnyKernel3 Flashable Zip created: ${AK3_ZIP_NAME}"
+
+          cd ${GITHUB_WORKSPACE}
+          zip -r built_modules.zip built_vendor
+          cp built_modules.zip ${GITHUB_WORKSPACE}/artifacts/
+
+      - name: GitHub Release
+        if: github.event.inputs.MAKE_RELEASE == 'true'
+        uses: softprops/action-gh-release@v3
+        with:
+          name: Prisma Kernels - Run ${{ github.run_number }} ${{ github.sha }}
+          tag_name: v${{ github.run_number }}-${{ github.sha }}
+          body: |
+            > [!WARNING]
+            > **DISCLAIMER:** This kernel is for experimental purposes. Flash at your own risk! 
+
+            *Compiled using: ${{ github.event.inputs.compiler }}*
+            *This release was automatically generated by GitHub Actions.*
+          files: |
+            ${{ github.workspace }}/artifacts/*.zip
+        env:
+            GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+
+      - name: Cleanup
+        if: always()
+        run: rm -rf out/
