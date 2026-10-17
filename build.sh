@@ -92,10 +92,6 @@ else
 fi
 
 build_kernel(){
-    # Patch BakaSU
-    ./setup.sh --cleanup # Clean it first, then clone.
-    curl -LSs "https://raw.githubusercontent.com/Baka-SU/BakaSU/main/kernel/setup.sh" | bash
-
     info "Kernel $(make kernelversion) | defconfig: ${DEFCONFIG}"
 
     make "${BUILD_OPTIONS[@]}" "${DEFCONFIG}" "${EXTRA_CONFIGS[@]}" || die "Failed to write .config"
