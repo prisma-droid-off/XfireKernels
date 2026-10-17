@@ -63,7 +63,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y bc bison build-essential flex git lld llvm python3 \
           git curl wget bc bison flex libssl-dev libelf-dev \
-          py/xthon3 python-is-python3 make gcc gcc-aarch64-linux-gnu \
+          python-is-python3 make gcc gcc-aarch64-linux-gnu \
           binutils binutils-aarch64-linux-gnu g++ cpio zip unzip \
           lz4 zstd xz-utils libncurses-dev libncurses5-dev \
           kmod rsync lld llvm clang dwarves pahole ccache \
