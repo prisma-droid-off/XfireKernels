@@ -12,6 +12,6 @@ mkdir -p built_vendor
 "$home"/lkm-tools/vendor_boot/modules_list.txt \
 "$home"/out/staging/lib/modules/5.15.197@prisma-droid \
 "$home"/lkm-tools/vendor_boot/modules.load \
-"$home"/kernel/out/System.map \
+"$home"/out/System.map \
 /usr/bin/llvm-strip \
 "$home"/built_vendor
