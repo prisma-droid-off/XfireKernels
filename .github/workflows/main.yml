@@ -69,7 +69,7 @@ jobs:
           device-tree-compiler zlib1g-dev libc6-dev libc6-dev-i386 cmake ninja-build
 
       # --- ADVANCED CCACHE CONFIGURATION & DETERMINISM ---
-      - name: Setup CCache
+      - name: Setup CCache Environment
         if: github.event.inputs.cache == 'true'
         run: |
           CACHE_DIR="${{ github.workspace }}/.ccache"
@@ -102,6 +102,12 @@ jobs:
               echo "CCACHE_DEPEND=true" >> "$GITHUB_ENV"
           fi
 
+          echo "/usr/lib/ccache" >> $GITHUB_PATH
+          echo "CC='ccache clang'" >> $GITHUB_ENV
+          echo "CXX='ccache clang++'" >> $GITHUB_ENV
+
+      - name: Cache CCache Files
+        if: github.event.inputs.cache == 'true'
         uses: actions/cache@v4
         with:
           path: ${{ github.workspace }}/.ccache
@@ -111,19 +117,8 @@ jobs:
             ccache-${{ runner.os }}-make-${{ github.event.inputs.compiler }}-${{ github.event.inputs.BASE_BRANCH }}-
             ccache-${{ runner.os }}-make-${{ github.event.inputs.compiler }}-
 
-          echo "/usr/lib/ccache" >> $GITHUB_PATH
-          echo "CC='ccache clang'" >> $GITHUB_ENV
-          echo "CXX='ccache clang++'" >> $GITHUB_ENV
-
       - name: Build Kernel && Pack Modules
         run: |
-
-          # 1. Point to your specific Google Clang binary toolchain paths
-          #export PATH=$(pwd)/toolchain/clang/host/linux-x86/clang-r450784d/bin:$PATH
-          #export PATH=$(pwd)/toolchain/build/kernel/build-tools/path/linux-x86/:$PATH
-          #export CC="ccache clang"
-          #export HOSTCC="ccache clang"
-
           # Print detailed ccache statistics at end of compile
           if [ "${{ github.event.inputs.cache }}" = "true" ]; then
             ccache -s
