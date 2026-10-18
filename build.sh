@@ -84,6 +84,12 @@ BUILD_OPTIONS=(
     HOSTCXX=g++
 )
 
+if command -v ccache >/dev/null && [ "${USE_CCACHE:-0}" = 1 ]; then
+    BUILD_OPTIONS+=(CC="ccache clang" HOSTCC="ccache gcc" HOSTCXX="ccache g++")
+else
+    BUILD_OPTIONS+=(HOSTCC=gcc HOSTCXX=g++)
+fi
+
 if [ "${USE_OUT_DIR}" = 1 ]; then
     BUILD_OPTIONS+=(O="${KERNEL_ROOT}/out")
     BOOT_DIR="${KERNEL_ROOT}/out/arch/arm64/boot"

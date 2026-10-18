@@ -2,23 +2,15 @@ name: Build Kernel Action
 
 permissions:
     contents: write
-    discussions: write
 
 on:
   workflow_dispatch:
     inputs:
       cache:
-        description: 'Enable ccache'
+        description: 'Enable CCache'
         required: true
         type: boolean
         default: true
-      compiler:
-        description: 'Compiler Toolchain'
-        required: true
-        type: choice
-        options:
-          - google-clang
-        default: google-clang
       MAKE_RELEASE:
         description: 'Create a GitHub Release'
         required: true
@@ -43,7 +35,7 @@ jobs:
           remove_haskell: true
           remove_tool_cache: true
           remove_swap: true
-          remove_packages: "azure-cli google-cloud-cli microsoft-edge-stable google-chrome-stable firefox postgresql* temurin-* *llvm* mysql* dotnet-sdk-*"
+          remove_packages: "azure-cli google-cloud-cli microsoft-edge-stable google-chrome-stable firefox postgresql* temurin-* mysql* dotnet-sdk-*"
           remove_packages_one_command: true
           remove_folders: "/usr/share/swift /usr/share/miniconda /usr/share/az* /usr/local/lib/node_modules /usr/local/share/chromium /usr/local/share/powershell /usr/local/julia /usr/local/aws-cli /usr/local/aws-sam-cli /usr/share/gradle"
           rm_cmd: "rmz"
@@ -54,22 +46,44 @@ jobs:
         uses: actions/checkout@v6
         with:
           ref: ${{ github.event.inputs.BASE_BRANCH }}
+          persist-credentials: false
           submodules: 'recursive'
           fetch-depth: 1
 
+      - name: Determine Next Version
+        id: version
+        run: |
+          git fetch --tags || true
+          LATEST_TAG=$(git tag -l "v*.*" | sort -V | tail -n 1)
+
+          if [ -z "$LATEST_TAG" ]; then
+            NEW_VERSION="1.1"
+          else
+            CLEAN_VER="${LATEST_TAG#v}"
+            MAJOR=$(echo "$CLEAN_VER" | cut -d. -f1)
+            MINOR=$(echo "$CLEAN_VER" | cut -d. -f2)
+            NEW_MINOR=$((MINOR + 1))
+            NEW_VERSION="${MAJOR}.${NEW_MINOR}"
+          fi
+
+          echo "Latest tag found: ${LATEST_TAG:-None}"
+          echo "New incremental version: $NEW_VERSION"
+          echo "kernel_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+
       - name: Setup BakaSU
         run: |
+          rm -rf drivers/kernelsu KernelSU
           curl -LSs "https://raw.githubusercontent.com/Baka-SU/BakaSU/main/kernel/setup.sh" | bash
 
-      # --- ADVANCED CCACHE CONFIGURATION & DETERMINISM ---
       - name: Setup CCache Environment
         if: github.event.inputs.cache == 'true'
         run: |
+          sudo apt update && sudo apt install -y ccache
           CACHE_DIR="${{ github.workspace }}/.ccache"
           mkdir -p "$CACHE_DIR"
           SETTINGS=(
             "CCACHE_DIR=$CACHE_DIR"
-            "CCACHE_MAXSIZE=12G"
+            "CCACHE_MAXSIZE=4G"
             "CCACHE_COMPILERCHECK=content"
             "CCACHE_BASEDIR=${GITHUB_WORKSPACE}"
             "CCACHE_NOHASHDIR=true"
@@ -95,60 +109,47 @@ jobs:
               echo "CCACHE_DEPEND=true" >> "$GITHUB_ENV"
           fi
 
-          echo "/usr/lib/ccache" >> $GITHUB_PATH
-          echo "CC='ccache clang'" >> $GITHUB_ENV
-          echo "CXX='ccache clang++'" >> $GITHUB_ENV
+          echo "USE_CCACHE=1" >> $GITHUB_ENV
 
       - name: Cache CCache Files
         if: github.event.inputs.cache == 'true'
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
-          path: ${{ github.workspace }}/.ccache
-          key: ccache-${{ runner.os }}-make-${{ github.event.inputs.compiler }}-${{ github.event.inputs.BASE_BRANCH }}-${{ github.run_id }}
-          restore-keys: |
-            ccache-${{ runner.os }}-make-${{ github.event.inputs.compiler }}-${{ github.event.inputs.BASE_BRANCH }}
-            ccache-${{ runner.os }}-make-${{ github.event.inputs.compiler }}-${{ github.event.inputs.BASE_BRANCH }}-
-            ccache-${{ runner.os }}-make-${{ github.event.inputs.compiler }}-
+           path: ${{ github.workspace }}/.ccache
+           key: ccache-${{ runner.os }}-${{ inputs.BASE_BRANCH }}-${{ github.run_id }}
+           restore-keys: |
+             ccache-${{ runner.os }}-${{ inputs.BASE_BRANCH }}-
 
       - name: Build Kernel && Pack Modules
         run: |
-          # Install Tools
-          sudo apt-get update
-          sudo apt-get install -y bc bison build-essential flex git lld llvm python3 \
-          git curl wget bc bison flex libssl-dev libelf-dev \
-          python-is-python3 make gcc gcc-aarch64-linux-gnu \
-          binutils binutils-aarch64-linux-gnu g++ cpio zip unzip \
-          lz4 zstd xz-utils libncurses-dev libncurses5-dev \
-          kmod rsync lld llvm clang dwarves pahole ccache \
-          device-tree-compiler zlib1g-dev libc6-dev libc6-dev-i386 cmake ninja-build
-
-          # Print detailed ccache statistics at end of compile
           if [ "${{ github.event.inputs.cache }}" = "true" ]; then
             ccache -s
           fi
 
-          # Run Build
           bash "$GITHUB_WORKSPACE"/build.sh
 
-          # Move compiled image to root workspace for easy access
           if [ -f "build/Image" ]; then
             cp "$GITHUB_WORKSPACE"/build/Image ./Image
           else
             echo "ERRO: Image não encontrada em build/Image"
             exit 1
           fi
-          # Lkm tools (pack modules)
           bash "$GITHUB_WORKSPACE"/lkm-tools/run.sh
+
+      - name: Save CCache Files
+        if: ${{ always() && github.event.inputs.cache == 'true' }}
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ github.workspace }}/.ccache
+          key: ccache-${{ runner.os }}-${{ inputs.BASE_BRANCH }}-${{ github.run_id }}
 
       - name: Package Artifacts
         run: |
           set -euo pipefail
           mkdir -p ${GITHUB_WORKSPACE}/artifacts
 
-          echo ">>> Cloning AnyKernel3..."
           git clone --depth=1 https://github.com/prisma-droid-off/AnyKernel3.git ${GITHUB_WORKSPACE}/AnyKernel3
 
-          echo ">>> Copying Kernel Image to AnyKernel3..."
           if [ -f "${GITHUB_WORKSPACE}/Image" ]; then
             cp "${GITHUB_WORKSPACE}/Image" "${GITHUB_WORKSPACE}/AnyKernel3/"
           else
@@ -156,14 +157,11 @@ jobs:
             exit 1
           fi
 
-          echo ">>> Creating Flashable Zip..."
           cd ${GITHUB_WORKSPACE}/AnyKernel3
           rm -rf .git README.md
 
-          # Corrected input value matching the top level variable string definition
-          AK3_ZIP_NAME="v${{ github.run_number }}-XFireKernels.zip"
+          AK3_ZIP_NAME="XFireKernels_v${{ steps.version.outputs.kernel_version }}.zip"
           zip -r9 "${GITHUB_WORKSPACE}/artifacts/${AK3_ZIP_NAME}" ./*
-          echo "AnyKernel3 Flashable Zip created: ${AK3_ZIP_NAME}"
 
           cd ${GITHUB_WORKSPACE}
           zip -r built_modules.zip built_vendor
@@ -173,19 +171,16 @@ jobs:
         if: github.event.inputs.MAKE_RELEASE == 'true'
         uses: softprops/action-gh-release@v3
         with:
-          name: Prisma Kernels - Run ${{ github.run_number }} ${{ github.sha }}
-          tag_name: v${{ github.run_number }}-${{ github.sha }}
+          name: Xfire Kernels v${{ steps.version.outputs.kernel_version }}
+          tag_name: v${{ steps.version.outputs.kernel_version }}
           body: |
             > [!WARNING]
-            > **DISCLAIMER:** This kernel is for experimental purposes. Flash at your own risk! 
+            > **DISCLAIMER:** I am not responsible for bricks, or anything of kind. Flash at your own risk! 
 
-            *Compiled using: ${{ github.event.inputs.compiler }}*
+            *Kernel Version: v${{ steps.version.outputs.kernel_version }}*
+            *Compiled using: clang-r450784e (LLVM)*
             *This release was automatically generated by GitHub Actions.*
           files: |
             ${{ github.workspace }}/artifacts/*.zip
         env:
             GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
-
-      - name: Cleanup
-        if: always()
-        run: rm -rf out/
