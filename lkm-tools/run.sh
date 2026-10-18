@@ -5,10 +5,8 @@ home="$GITHUB_WORKSPACE"
 MODDIR=$(ls -d "$home"/out/staging/lib/modules/*/ | head -n1)
 
 rm -fr modules.zip
-rm -fr built_vendor
-rm -fr vendor_dlkm
-mkdir -p built_vendor
-mkdir -p built_dlkm
+rm -fr built_dlkm built_vendor
+mkdir -p built_vendor built_dlkm
 
 # only OEM modules go here
 "$home"/lkm-tools/02.prepare_vendor_boot_modules.sh \
