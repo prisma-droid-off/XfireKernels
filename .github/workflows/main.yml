@@ -70,11 +70,6 @@ jobs:
           echo "New incremental version: $NEW_VERSION"
           echo "kernel_version=$NEW_VERSION" >> $GITHUB_OUTPUT
 
-      - name: Setup BakaSU
-        run: |
-          rm -rf drivers/kernelsu KernelSU
-          curl -LSs "https://raw.githubusercontent.com/Baka-SU/BakaSU/main/kernel/setup.sh" | bash
-
       - name: Setup CCache Environment
         if: github.event.inputs.cache == 'true'
         run: |
