@@ -25,7 +25,8 @@ on:
 jobs:
   build-kernel:
     runs-on: ubuntu-latest
-
+    
+    steps:
       - name: Checkout Source
         uses: actions/checkout@v6
         with:
