@@ -25,11 +25,11 @@ mkdir -p built_vendor built_dlkm prepare_dlkm custom_dlkm
 /usr/bin/llvm-strip \
 "$home"/built_dlkm \
 "$home"/lkm-tools/vendor_boot/modules_list.txt \
-"$home"/lkm-tools/prepare_dlkm
+"$home"/prepare_dlkm
 
 # here i can send my custom enabled features
 "$home"/lkm-tools/04.prepare_only_nethunter_modules.sh \
-"$home"/lkm-tools/prepare_dlkm \
+"$home"/prepare_dlkm \
 "$MODDIR" \
 "$home"/lkm-tools/vendor_boot/modules_list.txt \
 "$home"/lkm-tools/vendor_dlkm/modules_list.txt \
