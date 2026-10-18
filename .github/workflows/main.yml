@@ -131,7 +131,6 @@ jobs:
           mkdir -p ${GITHUB_WORKSPACE}/artifacts
           
           # this will creat built_vendor && buitl_dlkm folders
-          cd "$GITHUB_WORKSPACE"/lkm-tools
           bash "$GITHUB_WORKSPACE"/lkm-tools/run.sh
           
           cd "$GITHUB_WORKSPACE"/boot_editor_v15_r1
@@ -139,8 +138,8 @@ jobs:
           rm -fr build/unzip_boot/root.2/lib/modules/*
           rm -fr vendor_boot.img.signed vendor_boot.img.google vendor_boot.img.clear
           # now we replace vendor modules
-          chmod 744 "$GITHUB_WORKSPACE"/lkm-tools/built_vendor/*
-          cp "$GITHUB_WORKSPACE"/lkm-tools/built_vendor/* build/unzip_boot/root.2/lib/modules/
+          chmod 744 "$GITHUB_WORKSPACE"/built_vendor/*
+          cp "$GITHUB_WORKSPACE"/built_vendor/* build/unzip_boot/root.2/lib/modules/
           # now we run gradlew, and build vendor_boot image
           ./gradlew pack
           # vendor_boot.img
@@ -151,8 +150,8 @@ jobs:
           ./gradlew clear
           cp "$GITHUB_WORKSPACE"/lkm-tools/vendor_dlkm/vendor_dlkm.img .
           ./gradlew unpack
-          chmod 744 "$GITHUB_WORKSPACE"/lkm-tools/built_dlkm/*
-          cp "$GITHUB_WORKSPACE"/lkm-tools/built_dlkm/* build/unzip_boot/root.2/lib/modules/
+          chmod 744 "$GITHUB_WORKSPACE"/built_dlkm/*
+          cp "$GITHUB_WORKSPACE"/built_dlkm/* build/unzip_boot/root.2/lib/modules/
           ./gradlew pack
           
       - name: Save CCache Files

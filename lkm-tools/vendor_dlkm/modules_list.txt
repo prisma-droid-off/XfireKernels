@@ -1,1 +1,5 @@
 input_booster_lkm.ko
+loop.ko
+br_netfilter.ko
+ip_set.ko
+macvlan.ko
