@@ -28,7 +28,7 @@ mkdir -p built_vendor built_dlkm prepare_dlkm custom_dlkm
 "$home"/lkm-tools/prepare_dlkm
 
 # here i can send my custom enabled features
-"$home"/lkm-tools/04.prepare_vendor_dlkm.sh \
+"$home"/lkm-tools/04.prepare_only_nethunter_modules.sh \
 "$home"/lkm-tools/prepare_dlkm \
 "$MODDIR" \
 "$home"/lkm-tools/vendor_boot/modules_list.txt \
