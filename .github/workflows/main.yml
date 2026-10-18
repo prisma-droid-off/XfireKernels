@@ -134,12 +134,14 @@ jobs:
           bash "$GITHUB_WORKSPACE"/lkm-tools/run.sh
           
           cd "$GITHUB_WORKSPACE"/boot_editor_v15_r1
+          echo "== WORKING DIR =="
+          pwd
           # remove old modules and images just to be safe
           rm -fr build/unzip_boot/root.2/lib/modules/*
           rm -fr vendor_boot.img.signed vendor_boot.img.google vendor_boot.img.clear
           # now we replace vendor modules
           chmod 744 "$GITHUB_WORKSPACE"/built_vendor/*
-          cp "$GITHUB_WORKSPACE"/built_vendor/* build/unzip_boot/root.2/lib/modules/
+          cp "$GITHUB_WORKSPACE"/built_vendor/* "$GITHUB_WORKSPACE"/boot_editor_v15_r1/build/unzip_boot/root.2/lib/modules/
           # now we run gradlew, and build vendor_boot image
           ./gradlew pack
           # vendor_boot.img
@@ -151,7 +153,7 @@ jobs:
           cp "$GITHUB_WORKSPACE"/lkm-tools/vendor_dlkm/vendor_dlkm.img .
           ./gradlew unpack
           chmod 744 "$GITHUB_WORKSPACE"/built_dlkm/*
-          cp "$GITHUB_WORKSPACE"/built_dlkm/* build/unzip_boot/root.2/lib/modules/
+          cp "$GITHUB_WORKSPACE"/built_dlkm/* "$GITHUB_WORKSPACE"/boot_editor_v15_r1/build/unzip_boot/root.2/lib/modules
           ./gradlew pack
           
       - name: Save CCache Files
