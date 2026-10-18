@@ -1,4 +1,1 @@
 input_booster_lkm.ko
-br_netfilter.ko
-ip_vs.ko
-macvlan.ko

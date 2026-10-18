@@ -157,7 +157,6 @@ jobs:
           
           # mount vendor_lkm 
           sudo mount vendor_dlkm.img -o loop -t erofs build/unzip_boot/mount
-          
           sudo mkdir -p build/unzip_boot/vendor_dlkm && sudo cp -r build/unzip_boot/mount/* build/unzip_boot/vendor_dlkm
           
           #fix permissions, replace modules and pack
@@ -196,13 +195,18 @@ jobs:
           XfireKernels="XfireKernels_v${{ steps.version.outputs.kernel_version }}.zip"
           zip -r9 "${GITHUB_WORKSPACE}/artifacts/${XfireKernels}" ./*
           
-          # vboot_modules
           cd ${GITHUB_WORKSPACE}
-          zip -r vboot_modules.zip "${GITHUB_WORKSPACE}"/built_vendor
+          
+          # vboot_modules
+          zip -r vboot_modules.zip built_vendor
           cp vboot_modules.zip ${GITHUB_WORKSPACE}/artifacts/
           
           # vdlkm_modules
-          zip -r vdlkm_modules.zip "${GITHUB_WORKSPACE}"/built_dlkm
+          zip -r vdlkm_modules.zip built_dlkm
+          cp vdlkm_modules.zip ${GITHUB_WORKSPACE}/artifacts/
+          
+          # custom_dlkm modules
+          zip -r vdlkm_modules.zip custom_dlkm
           cp vdlkm_modules.zip ${GITHUB_WORKSPACE}/artifacts/
           
           # vendor_dlkm.img
