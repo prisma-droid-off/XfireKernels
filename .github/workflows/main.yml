@@ -26,12 +26,6 @@ jobs:
   build-kernel:
     runs-on: ubuntu-latest
 
-    steps:
-      - name: Free Disk Space
-        run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
-                      /opt/hostedtoolcache/CodeQL /usr/local/share/boost
-
       - name: Checkout Source
         uses: actions/checkout@v6
         with:
@@ -148,7 +142,7 @@ jobs:
           chmod 744 "$GITHUB_WORKSPACE"/built_vendor/*
           cp "$GITHUB_WORKSPACE"/built_vendor/* build/unzip_boot/root.2/lib/modules/
 
-          ./gradlew pack
+          ./gradlew pack --stacktrace 
           cp vendor_boot.img.signed "$GITHUB_WORKSPACE"/artifacts/vendor_boot.img
     
           # == vendor_dlkm packing
