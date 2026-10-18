@@ -49,8 +49,8 @@ fetch(){
 }
 
 DEB_PKGS=(build-essential bc bison flex pkg-config git curl tar xz-utils zip unzip cpio rsync
-          kmod perl python3 python-is-python3 libssl-dev libelf-dev pahole libncurses-dev
-          zlib1g-dev libyaml-dev lz4 zstd device-tree-compiler)
+          kmod perl python3 python-is-python3 libssl-dev libelf-dev pahole libncurses-dev clang
+          zlib1g-dev libyaml-dev lz4 zstd device-tree-compiler llvm-dev llvm-runtime llvm)
 
 install_deps(){
     local missing=() available=() p
