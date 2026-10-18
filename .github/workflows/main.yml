@@ -163,12 +163,12 @@ jobs:
           # mount vendor_lkm 
           sudo mount vendor_dlkm.img -o loop -t erofs build/unzip_boot/mount
           
-          sudo mkdir -p build/unzip_boot/vendor_dlkm && cp -r build/unzip_boot/mount/* build/unzip_boot/vendor_dlkm
+          sudo mkdir -p build/unzip_boot/vendor_dlkm && sudo cp -r build/unzip_boot/mount/* build/unzip_boot/vendor_dlkm
           
           #fix permissions, replace modules and pack
           chmod 744 "$GITHUB_WORKSPACE"/built_dlkm/*
           
-          cp "$GITHUB_WORKSPACE"/built_dlkm/* "$GITHUB_WORKSPACE"/boot_editor_v15_r1/build/unzip_boot/vendor_dlkm/lib/modules
+          sudo cp "$GITHUB_WORKSPACE"/built_dlkm/* "$GITHUB_WORKSPACE"/boot_editor_v15_r1/build/unzip_boot/vendor_dlkm/lib/modules
           
           sudo umount vendor_dlkm.img
           
