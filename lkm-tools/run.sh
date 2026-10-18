@@ -27,4 +27,5 @@ mkdir -p built_dlkm
 "$home"/out/System.map \
 /usr/bin/llvm-strip \
 "$home"/built_dlkm \
-"$home"/lkm-tools/vendor_boot/modules_list.txt
+"$home"/lkm-tools/vendor_boot/modules_list.txt \
+""
