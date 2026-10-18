@@ -198,11 +198,11 @@ jobs:
           
           # vboot_modules
           cd ${GITHUB_WORKSPACE}
-          zip -r vboot_modules.zip lkm-tools/built_vendor
+          zip -r vboot_modules.zip "${GITHUB_WORKSPACE}"/built_vendor
           cp vboot_modules.zip ${GITHUB_WORKSPACE}/artifacts/
           
           # vdlkm_modules
-          zip -r vdlkm_modules.zip lkm-tools/built_dlkm
+          zip -r vdlkm_modules.zip "${GITHUB_WORKSPACE}"/built_dlkm
           cp vdlkm_modules.zip ${GITHUB_WORKSPACE}/artifacts/
           
           # vendor_dlkm.img
