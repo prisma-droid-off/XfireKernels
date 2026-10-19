@@ -48,5 +48,5 @@ done
 "$home"/lkm-tools/vendor_boot/modules_list.txt \
 "$home"/lkm-tools/vendor_dlkm/modules_list.txt \
 "$home"/out/System.map \
-"$home"/lkm-tools/custom_dlkm \
+"$home"/custom_dlkm \
 /usr/bin/llvm-strip
