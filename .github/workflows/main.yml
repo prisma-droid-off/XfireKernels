@@ -207,7 +207,7 @@ jobs:
           
           # custom_dlkm modules
           zip -r vdlkm_modules.zip custom_dlkm
-          cp vdlkm_modules.zip ${GITHUB_WORKSPACE}/artifacts/
+          cp custom_dlkm.zip ${GITHUB_WORKSPACE}/artifacts/
           
           # vendor_dlkm.img
           cp ./boot_editor_v15_r1/vendor_dlkm.img.signed ${GITHUB_WORKSPACE}/artifacts/vendor_dlkm.img
