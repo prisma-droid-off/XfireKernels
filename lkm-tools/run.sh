@@ -10,9 +10,26 @@ mkdir built_vendor built_dlkm prepare_dlkm custom_dlkm
 # manually copy kernel modules to prepare_dlkm folder
 # Define modules as a Bash array
 custom_modules=(
+    "input_booster_lkm.ko" # vendor_dlkm
+    "ip_set.ko"
     "macvlan.ko"
     "ip_vs.ko"
     "br_netfilter.ko"
+    "ip_set_hash_ip.ko"
+    "ip_set_hash_net.ko"
+    "xt_set.ko"
+    "unix_diag.ko"
+    "af_packet_diag.ko"
+    "netlink_diag.ko"
+    "xt_CHECKSUM.ko"
+    "xt_ipvs.ko"
+    "ip6t_REJECT.ko"
+    "ipt_REJECT.ko"
+    "xt_recent.ko"
+    "xt_LOG.ko"
+    "xt_MASQUERADE.ko"
+    "ip6table_nat.ko"
+    "xt_addrtype.ko"
 )
 
 # Loop through the array properly
