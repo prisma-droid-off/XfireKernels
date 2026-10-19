@@ -145,8 +145,8 @@ jobs:
           chmod 744 "$GITHUB_WORKSPACE"/built_vendor/*
           chmod 744 "$GITHUB_WORKSPACE"/lkm-tools/fstab.s5e8535
           
-          cp "$GITHUB_WORKSPACE"/lkm-tools/fstab.s5e8535 build/unzip_boot/root.1/first_stage_ramdisk/
-          cp "$GITHUB_WORKSPACE"/lkm-tools/fstab.s5e8535 build/unzip_boot/root.1
+          cp "$GITHUB_WORKSPACE"/boot_editor_v15_r1/fstab.s5e8535 build/unzip_boot/root.1/first_stage_ramdisk/
+          cp "$GITHUB_WORKSPACE"/boot_editor_v15_r1/fstab.s5e8535 build/unzip_boot/root.1
           cp "$GITHUB_WORKSPACE"/built_vendor/* build/unzip_boot/root.2/lib/modules/
 
           ./gradlew pack 
