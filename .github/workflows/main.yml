@@ -207,8 +207,11 @@ jobs:
           
           # custom_dlkm modules
           zip -r custom_dlkm.zip custom_dlkm
+          pwd
           ls -la custom_dlkm.zip
-          cp custom_dlkm.zip ${GITHUB_WORKSPACE}/artifacts/
+          find "$GITHUB_WORKSPACE" -name custom_dlkm.zip 2>/dev/null
+          # find "$GITHUB_WORKSPACE" -name custom_dlkm.zip -exec cp {} "$GITHUB_WORKSPACE/artifacts/" \;
+          cp "${GITHUB_WORKSPACE}/custom_dlkm.zip" "${GITHUB_WORKSPACE}/artifacts/"
           
           # vendor_dlkm.img
           cp ./boot_editor_v15_r1/vendor_dlkm.img.signed ${GITHUB_WORKSPACE}/artifacts/vendor_dlkm.img

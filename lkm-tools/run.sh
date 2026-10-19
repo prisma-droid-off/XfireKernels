@@ -5,7 +5,7 @@ home="$GITHUB_WORKSPACE"
 MODDIR=$(ls -d "$home"/out/staging/lib/modules/*/ | head -n1)
 
 rm -fr built_dlkm built_vendor prepare_dlkm custom_dlkm
-mkdir -p built_vendor built_dlkm prepare_dlkm custom_dlkm
+mkdir built_vendor built_dlkm prepare_dlkm custom_dlkm
 
 # manually copy kernel modules to prepare_dlkm folder
 # Define modules as a Bash array
