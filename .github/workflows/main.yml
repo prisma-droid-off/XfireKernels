@@ -155,8 +155,7 @@ jobs:
           # == vendor_dlkm packing #m14_5g just refuses loading dlkm, so we will force it to load by packing them into a ksu_module
           
           MODDIR=$(ls -d "$GITHUB_WORKSPACE"/custom_dlkm/vendor_dlkm/lib/modules/*/ | head -n1)
-          cp "$MODDIR" "$GITHUB_WORKSPACE"/lkm_loader/system/vendor/lib/modules/custom
-          
+          cp -r "$MODDIR"* "$GITHUB_WORKSPACE"/lkm_loader/system/vendor/lib/modules/custom
           
       - name: Save CCache Files
         if: ${{ always() && github.event.inputs.cache == 'true' }}
