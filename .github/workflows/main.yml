@@ -207,6 +207,7 @@ jobs:
           
           # custom_dlkm modules
           zip -r custom_dlkm.zip custom_dlkm
+          ls -la custom_dlkm.zip
           cp custom_dlkm.zip ${GITHUB_WORKSPACE}/artifacts/
           
           # vendor_dlkm.img
