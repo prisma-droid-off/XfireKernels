@@ -39,7 +39,7 @@ done
 /usr/bin/llvm-strip \
 "$home"/built_dlkm \
 "$home"/lkm-tools/vendor_boot/modules_list.txt \
-"" # "$home"/prepare_dlkm, let me remove these modules from vdlkm
+"$home"/prepare_dlkm 
 
 # here i can send my custom enabled features
 "$home"/lkm-tools/04.prepare_only_nethunter_modules.sh \

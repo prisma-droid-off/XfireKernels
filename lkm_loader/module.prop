@@ -1,0 +1,6 @@
+id=lkm_loader
+name=Custom LKM Loader
+version=1.0
+versionCode=1000
+author=ravindu644
+description=A Magisk/KSU/AP module to load your custom LKMs using modpropbe..!

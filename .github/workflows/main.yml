@@ -140,33 +140,23 @@ jobs:
           # replace vendor modules
           rm -fr build/unzip_boot/root.2/lib/modules/*
           mkdir -p build/unzip_boot/root.2/lib/modules
+          
+          # fix permissions and replace fstab aswell
           chmod 744 "$GITHUB_WORKSPACE"/built_vendor/*
+          chmod 744 "$GITHUB_WORKSPACE"/lkm-tools/fstab.s5e8535
+          
+          cp "$GITHUB_WORKSPACE"/lkm-tools/fstab.s5e8535 build/unzip_boot/root.1/first_stage_ramdisk/
+          cp "$GITHUB_WORKSPACE"/lkm-tools/fstab.s5e8535 build/unzip_boot/root.1
           cp "$GITHUB_WORKSPACE"/built_vendor/* build/unzip_boot/root.2/lib/modules/
 
           ./gradlew pack 
           cp vendor_boot.img.signed "$GITHUB_WORKSPACE"/artifacts/vendor_boot.img
     
-          # == vendor_dlkm packing
+          # == vendor_dlkm packing #m14_5g just refuses loading dlkm, so we will force it to load by packing them into a ksu_module
           
-          # nuke vboot
-          ./gradlew clear && ./gradlew clean
+          MODDIR=$(ls -d "$GITHUB_WORKSPACE"/custom_dlkm/vendor_dlkm/lib/modules/*/ | head -n1)
+          cp "$GITHUB_WORKSPACE/$MODDIR" "$GITHUB_WORKSPACE"/lkm_loader/system/vendor/lib/modules/custom
           
-          # cp vlkm and unpack
-          cp "$GITHUB_WORKSPACE"/lkm-tools/vendor_dlkm/vendor_dlkm.img .
-          ./gradlew unpack
-          
-          # mount vendor_lkm 
-          sudo mount vendor_dlkm.img -o loop -t erofs build/unzip_boot/mount
-          sudo mkdir -p build/unzip_boot/vendor_dlkm && sudo cp -r build/unzip_boot/mount/* build/unzip_boot/vendor_dlkm
-          
-          #fix permissions, replace modules and pack
-          chmod 744 "$GITHUB_WORKSPACE"/built_dlkm/*
-          
-          sudo cp "$GITHUB_WORKSPACE"/built_dlkm/* "$GITHUB_WORKSPACE"/boot_editor_v15_r1/build/unzip_boot/vendor_dlkm/lib/modules
-          
-          sudo umount vendor_dlkm.img
-          
-          ./gradlew pack
           
       - name: Save CCache Files
         if: ${{ always() && github.event.inputs.cache == 'true' }}
@@ -201,20 +191,9 @@ jobs:
           zip -r vboot_modules.zip built_vendor
           cp vboot_modules.zip ${GITHUB_WORKSPACE}/artifacts/
           
-          # vdlkm_modules
-          zip -r vdlkm_modules.zip built_dlkm
-          cp vdlkm_modules.zip ${GITHUB_WORKSPACE}/artifacts/
-          
           # custom_dlkm modules
-          zip -r custom_dlkm.zip custom_dlkm
-          pwd
-          ls -la custom_dlkm.zip
-          find "$GITHUB_WORKSPACE" -name custom_dlkm.zip 2>/dev/null
-          # find "$GITHUB_WORKSPACE" -name custom_dlkm.zip -exec cp {} "$GITHUB_WORKSPACE/artifacts/" \;
-          cp "${GITHUB_WORKSPACE}/custom_dlkm.zip" "${GITHUB_WORKSPACE}/artifacts/"
-          
-          # vendor_dlkm.img
-          cp ./boot_editor_v15_r1/vendor_dlkm.img.signed ${GITHUB_WORKSPACE}/artifacts/vendor_dlkm.img
+          zip -r custom_lkmloader.zip lkm_loader
+          cp "${GITHUB_WORKSPACE}/custom_lkmloader.zip" "${GITHUB_WORKSPACE}/artifacts/"
           
 
       - name: GitHub Release
