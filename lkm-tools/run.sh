@@ -7,6 +7,20 @@ MODDIR=$(ls -d "$home"/out/staging/lib/modules/*/ | head -n1)
 rm -fr built_dlkm built_vendor prepare_dlkm custom_dlkm
 mkdir -p built_vendor built_dlkm prepare_dlkm custom_dlkm
 
+# manually copy kernel modules to prepare_dlkm folder
+# Define modules as a Bash array
+custom_modules=(
+    "macvlan.ko"
+    "ip_vs.ko"
+    "br_netfilter.ko"
+)
+
+# Loop through the array properly
+for module in "${custom_modules[@]}"; do
+    # Search for the module inside MODDIR and copy it to prepare_dlkm
+    find "$MODDIR" -type f -name "$module" -exec cp {} prepare_dlkm/ \;
+done
+
 # only OEM modules go here
 "$home"/lkm-tools/02.prepare_vendor_boot_modules.sh \
 "$home"/lkm-tools/vendor_boot/modules_list.txt \
