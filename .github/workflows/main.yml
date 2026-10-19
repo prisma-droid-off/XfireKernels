@@ -206,7 +206,7 @@ jobs:
           cp vdlkm_modules.zip ${GITHUB_WORKSPACE}/artifacts/
           
           # custom_dlkm modules
-          zip -r vdlkm_modules.zip custom_dlkm
+          zip -r custom_dlkm.zip custom_dlkm
           cp custom_dlkm.zip ${GITHUB_WORKSPACE}/artifacts/
           
           # vendor_dlkm.img
