@@ -1,6 +1,6 @@
 {
-  "version": "1.1",
-  "versionCode": 1001,
+  "version": "1.16",
+  "versionCode": 1016,
   "zipUrl": "https://github.com/prisma-droid-off/XfireKernels/releases/latest/download/custom_lkmloader.zip",
   "changelog": "https://github.com/prisma-droid-off/XfireKernels/kernel/lkm_loader/changelog.md"
 }
