@@ -208,7 +208,7 @@ jobs:
         env:
             GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
 
-      - name: Update Module JSON
+      - name: Update Module Files and Prop
         run: |
           python3 - <<'EOF'
           import json
@@ -222,8 +222,8 @@ jobs:
           minor = int(parts[1]) if len(parts) > 1 else 0
           new_version_code = major * 1000 + minor
 
+          # 1. Update update.json
           json_path = "lkm_loader/update.json" 
-          
           data = {}
           if os.path.exists(json_path):
               with open(json_path, "r") as f:
@@ -235,22 +235,39 @@ jobs:
           with open(json_path, "w") as f:
               json.dump(data, f, indent=2)
               f.write("\n")
+          print(f"Successfully updated {json_path}")
 
-          print(f"Successfully updated {json_path} -> version: {version}, versionCode: {new_version_code}")
+          # 2. Update module.prop
+          prop_path = "lkm_loader/module.prop"
+          if os.path.exists(prop_path):
+              lines = []
+              with open(prop_path, "r") as f:
+                  for line in f:
+                      if line.startswith("version="):
+                          lines.append(f"version={version}\n")
+                      elif line.startswith("versionCode="):
+                          lines.append(f"versionCode={new_version_code}\n")
+                      else:
+                          lines.append(line)
+              
+              with open(prop_path, "w") as f:
+                  f.writelines(lines)
+              print(f"Successfully updated {prop_path}")
+          else:
+              print(f"Warning: {prop_path} not found!")
           EOF
         env:
           KERNEL_VERSION: ${{ steps.version.outputs.kernel_version }}
 
-      - name: Commit and Push Update JSON
+      - name: Commit and Push Updates
         run: |
           git config --global user.name "prisma-droid-off"
           git config --global user.email "futebolista596@gmail.com"
           
           git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
           
-          git add lkm_loader/update.json
+          git add lkm_loader/update.json lkm_loader/module.prop
           
           # Apenas efetua o commit e push se existirem alterações reais
-          git diff --cached --quiet || git commit -m "CI: Update module update.json for v${{ steps.version.outputs.kernel_version }} [skip ci]"
+          git diff --cached --quiet || git commit -m "CI: Update module version to v${{ steps.version.outputs.kernel_version }} [skip ci]"
           git push origin HEAD:${{ github.event.inputs.BASE_BRANCH || 'main' }}
-
