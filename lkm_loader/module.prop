@@ -3,4 +3,5 @@ name=Custom LKM Loader
 version=1.0
 versionCode=1000
 author=ravindu644
-description=A Magisk/KSU/AP module to load your custom LKMs using modpropbe..!
+UpdateJson=https://github.com/prisma-droid-off/XfireKernels/kernel/lkm_loader/update.json
+description=A Magisk/KSU/AP module to load your custom LKMs using modprobe..!
