@@ -148,25 +148,7 @@ jobs:
           ./gradlew pack 
           cp vendor_boot.img.signed "$GITHUB_WORKSPACE"/anykernel3/vendor_boot.img
           
-          # == vendor_dlkm packing
-          
-          # nuke vboot
-          ./gradlew clear && ./gradlew clean
-          
-          # cp vlkm and unpack
-          cp "$GITHUB_WORKSPACE"/lkm-tools/vendor_dlkm/vendor_dlkm.img .
-          ./gradlew unpack
-          
-          # mount vendor_lkm 
-          sudo mount vendor_dlkm.img -o loop -t erofs build/unzip_boot/mount
-          sudo mkdir -p build/unzip_boot/vendor_dlkm && sudo cp -r build/unzip_boot/mount/* build/unzip_boot/vendor_dlkm
-          
-          ./gradlew pack
-          
-          # vendor_dlkm.img
-          cp "${GITHUB_WORKSPACE}"/boot_editor_v15_r1/vendor_dlkm.img.signed ${GITHUB_WORKSPACE}/anykernel3/vendor_dlkm.img
-
-          # == vendor_dlkm packing #m14_5g just refuses loading dlkm, so we will force it to load by packing them into a ksu_module ( for now )
+          # == vendor_dlkm packing #m14_5g just refuses loading dlkm, so we will force it to load by packing them into a ksu_module.
           
           MODDIR=$(ls -d "$GITHUB_WORKSPACE"/custom_dlkm/vendor_dlkm/lib/modules/*/ | head -n1)
 
@@ -204,7 +186,8 @@ jobs:
           cp vboot_modules.zip ${GITHUB_WORKSPACE}/artifacts/
           
           # custom_dlkm modules
-          zip -r custom_lkmloader.zip lkm_loader
+          cd ${GITHUB_WORKSPACE}/lkm_loader
+          zip -r custom_lkmloader.zip .
           cp "${GITHUB_WORKSPACE}/custom_lkmloader.zip" "${GITHUB_WORKSPACE}/artifacts/"
 
       - name: GitHub Release

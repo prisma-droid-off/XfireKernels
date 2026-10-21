@@ -39,4 +39,4 @@ split_boot;
 flash_boot;
 
 flash_generic vendor_boot;
-flash_generic vendor_dlkm;
+#flash_generic vendor_dlkm;
