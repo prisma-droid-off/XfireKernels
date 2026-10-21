@@ -160,35 +160,6 @@ jobs:
         with:
           path: ${{ github.workspace }}/.ccache
           key: ccache-${{ runner.os }}-${{ inputs.BASE_BRANCH }}-${{ github.run_id }}
-
-      - name: Package Artifacts
-        run: |
-          set -euo pipefail
-
-          if [ -f "${GITHUB_WORKSPACE}/Image" ]; then
-            cp "${GITHUB_WORKSPACE}/Image" "${GITHUB_WORKSPACE}/anykernel3/"
-          elif [ -f "${GITHUB_WORKSPACE}/build/Image" ]; then
-            cp "${GITHUB_WORKSPACE}/build/Image" "${GITHUB_WORKSPACE}/anykernel3/"
-          else
-            echo "[x] Kernel Image not found!"
-            exit 1
-          fi
-
-          cd ${GITHUB_WORKSPACE}/anykernel3
-
-          ak3="XfireKernels_v${{ steps.version.outputs.kernel_version }}.zip"
-          zip -r9 "${GITHUB_WORKSPACE}/artifacts/${ak3}" ./*
-          
-          cd ${GITHUB_WORKSPACE}
-          
-          # vboot_modules
-          zip -r9 vboot_modules.zip built_vendor
-          cp vboot_modules.zip ${GITHUB_WORKSPACE}/artifacts/
-          
-          # custom_dlkm modules
-          cd ${GITHUB_WORKSPACE}/lkm_loader
-          zip -r custom_lkmloader.zip .
-          cp "${GITHUB_WORKSPACE}/lkm_loader/custom_lkmloader.zip" "${GITHUB_WORKSPACE}/artifacts/"
           
       - name: Update Module Files and Prop
         run: |
@@ -241,6 +212,35 @@ jobs:
         env:
           KERNEL_VERSION: ${{ steps.version.outputs.kernel_version }}
 
+      - name: Package Artifacts
+        run: |
+          set -euo pipefail
+
+          if [ -f "${GITHUB_WORKSPACE}/Image" ]; then
+            cp "${GITHUB_WORKSPACE}/Image" "${GITHUB_WORKSPACE}/anykernel3/"
+          elif [ -f "${GITHUB_WORKSPACE}/build/Image" ]; then
+            cp "${GITHUB_WORKSPACE}/build/Image" "${GITHUB_WORKSPACE}/anykernel3/"
+          else
+            echo "[x] Kernel Image not found!"
+            exit 1
+          fi
+
+          cd ${GITHUB_WORKSPACE}/anykernel3
+
+          ak3="XfireKernels_v${{ steps.version.outputs.kernel_version }}.zip"
+          zip -r9 "${GITHUB_WORKSPACE}/artifacts/${ak3}" ./*
+          
+          cd ${GITHUB_WORKSPACE}
+          
+          # vboot_modules
+          zip -r9 vboot_modules.zip built_vendor
+          cp vboot_modules.zip ${GITHUB_WORKSPACE}/artifacts/
+          
+          # custom_dlkm modules
+          cd ${GITHUB_WORKSPACE}/lkm_loader
+          zip -r custom_lkmloader.zip .
+          cp "${GITHUB_WORKSPACE}/lkm_loader/custom_lkmloader.zip" "${GITHUB_WORKSPACE}/artifacts/"
+          
       - name: Commit and Push Updates
         run: |
           git config --global user.name "prisma-droid-off"
