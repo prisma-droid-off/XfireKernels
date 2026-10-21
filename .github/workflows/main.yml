@@ -112,7 +112,7 @@ jobs:
           if [ "${{ github.event.inputs.cache }}" = "true" ]; then
             ccache -s
           fi
-
+          make mrproper
           bash "$GITHUB_WORKSPACE"/build.sh
 
           if [ -f "build/Image" ]; then
