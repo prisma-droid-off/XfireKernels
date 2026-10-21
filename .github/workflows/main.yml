@@ -188,7 +188,7 @@ jobs:
           # custom_dlkm modules
           cd ${GITHUB_WORKSPACE}/lkm_loader
           zip -r custom_lkmloader.zip .
-          cp "${GITHUB_WORKSPACE}/custom_lkmloader.zip" "${GITHUB_WORKSPACE}/artifacts/"
+          cp "${GITHUB_WORKSPACE}/lkm_loader/custom_lkmloader.zip" "${GITHUB_WORKSPACE}/artifacts/"
 
       - name: GitHub Release
         if: github.event.inputs.MAKE_RELEASE == 'true'
