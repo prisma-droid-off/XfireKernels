@@ -10,6 +10,7 @@ LP_ENABLE=true
 UMH_RESTRICTION_ENABLE=true
 TRUSTED_MAP_ENABLE=false
 USER_BUILD=false
+INTEGRITY_ENABLE=false
 
 # Additional debug
 LOG_BUFFER_ENABLE=false
@@ -27,7 +28,7 @@ endif
 
 ifneq ($(wildcard $(srctree)/include/crypto/internal/rsa.h),)
     $(warning [DEFEX] INTEGRITY_ENABLE)
-    INTEGRITY_ENABLE=true
+    INTEGRITY_ENABLE=false
 endif
 
 # caches to enable

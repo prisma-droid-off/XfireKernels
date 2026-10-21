@@ -246,8 +246,11 @@ jobs:
           git config --global user.name "prisma-droid-off"
           git config --global user.email "futebolista596@gmail.com"
           
+          git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
+          
           git add lkm_loader/update.json
           
-          # Only commit and push if there are actual changes
+          # Apenas efetua o commit e push se existirem alterações reais
           git diff --cached --quiet || git commit -m "CI: Update module update.json for v${{ steps.version.outputs.kernel_version }} [skip ci]"
-          git push origin ${{ github.event.inputs.BASE_BRANCH || 'main' }}
+          git push origin HEAD:${{ github.event.inputs.BASE_BRANCH || 'main' }}
+
