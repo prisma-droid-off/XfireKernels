@@ -18,6 +18,11 @@ custom_modules=(
     "ip_vs_proto_tcp.ko"
     "ip_vs_rr.ko"
     "ip_vs_proto_udp.ko"
+    "ip_set.ko"
+    "ip_set_hash_ip.ko"
+    "ip_set_hash_net.ko"
+    "btrfs.ko"
+    
 )
 
 # Loop through the array properly
