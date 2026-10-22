@@ -238,9 +238,11 @@ jobs:
           
           # custom_dlkm modules
           cd ${GITHUB_WORKSPACE}/lkm_loader
-          zip -r custom_lkmloader.zip .
-          cp "${GITHUB_WORKSPACE}/lkm_loader/custom_lkmloader.zip" "${GITHUB_WORKSPACE}/artifacts/"
-          
+          lkm_zip="Custom-LKM-Loader-${{ steps.version.outputs.kernel_version }}.zip"
+    
+          zip -r9 "${lkm_zip}" .
+          cp "${lkm_zip}" "${GITHUB_WORKSPACE}/artifacts/"
+    
       - name: Commit and Push Updates
         run: |
           git config --global user.name "prisma-droid-off"
