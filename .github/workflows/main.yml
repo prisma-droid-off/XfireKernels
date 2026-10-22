@@ -1,7 +1,7 @@
 name: Build Kernel Action
 
 permissions:
-    contents: write
+  contents: write
 
 on:
   workflow_dispatch:
@@ -22,15 +22,21 @@ on:
         required: false
         default: main
 
+concurrency:
+  group: kernel-build-${{ inputs.BASE_BRANCH || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-kernel:
+    name: Build Kernel & Publish
     runs-on: ubuntu-latest
-    
+    timeout-minutes: 120
+
     steps:
       - name: Checkout Source
         uses: actions/checkout@v6
         with:
-          ref: ${{ github.event.inputs.BASE_BRANCH }}
+          ref: ${{ inputs.BASE_BRANCH }}
           persist-credentials: false
           submodules: 'recursive'
           fetch-tags: true
@@ -39,237 +45,264 @@ jobs:
       - name: Determine Next Version
         id: version
         run: |
-          git fetch --tags || true
+          set -euo pipefail
+          git fetch --tags --quiet || true
           LATEST_TAG=$(git tag -l "v*.*" | sort -V | tail -n 1)
 
           if [ -z "$LATEST_TAG" ]; then
             NEW_VERSION="1.1"
           else
             CLEAN_VER="${LATEST_TAG#v}"
-            MAJOR=$(echo "$CLEAN_VER" | cut -d. -f1)
-            MINOR=$(echo "$CLEAN_VER" | cut -d. -f2)
-            NEW_MINOR=$((MINOR + 1))
-            NEW_VERSION="${MAJOR}.${NEW_MINOR}"
+            MAJOR="${CLEAN_VER%%.*}"
+            MINOR="${CLEAN_VER#*.}"
+            NEW_VERSION="${MAJOR}.$((MINOR + 1))"
           fi
 
-          echo "Latest tag found: ${LATEST_TAG:-None}"
-          echo "New incremental version: $NEW_VERSION"
-          echo "kernel_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "Latest tag: ${LATEST_TAG:-none} -> New version: ${NEW_VERSION}"
+          echo "kernel_version=${NEW_VERSION}" >> "$GITHUB_OUTPUT"
 
-      - name: Update BakaSU
+      - name: Sync KernelSU (latest upstream main)
         run: |
+          set -euo pipefail
           cd KernelSU
           git fetch --unshallow --tags origin || git fetch --tags origin
           git checkout --detach origin/main
 
-      - name: Setup CCache Environment
-        if: github.event.inputs.cache == 'true'
-        run: |
-          sudo apt update && sudo apt install -y ccache
-          CACHE_DIR="${{ github.workspace }}/.ccache"
-          mkdir -p "$CACHE_DIR"
-          SETTINGS=(
-            "CCACHE_DIR=$CACHE_DIR"
-            "CCACHE_MAXSIZE=4G"
-            "CCACHE_COMPILERCHECK=content"
-            "CCACHE_BASEDIR=${GITHUB_WORKSPACE}"
-            "CCACHE_NOHASHDIR=true"
-            "CCACHE_IGNOREOPTIONS=-sysroot* -fdebug-prefix-map=* -fmacro-prefix-map=*"
-            "CCACHE_COMPRESS=true"
-            "CCACHE_COMPRESSLEVEL=8"
-            "CCACHE_DIRECT=true"
-            "CCACHE_FILE_CLONE=true"
-            "CCACHE_INODE_CACHE=true"
-            "CCACHE_IS_KERNEL_COMPILING=true"
-            "CCACHE_UMASK=002"
-            "KBUILD_BUILD_TIMESTAMP=2026-01-01"
-            "CCACHE_SLOPPINESS=file_macro,time_macros,include_file_mtime,include_file_ctime,pch_defines,system_headers,locale,file_stat_matches"
-          )
+      - name: Cache Gradle (boot editor)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('boot_editor_v15_r1/*') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
 
-          for setting in "${SETTINGS[@]}"; do
-            export "$setting"
-            echo "$setting" >> $GITHUB_ENV
-          done
+      - name: Setup CCache Environment
+        if: inputs.cache == true
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ccache
+
+          echo "CCACHE_DIR=${{ github.workspace }}/.ccache"   >> "$GITHUB_ENV"
+          echo "CCACHE_MAXSIZE=4G"                            >> "$GITHUB_ENV"
+          echo "CCACHE_COMPILERCHECK=content"                 >> "$GITHUB_ENV"
+          echo "CCACHE_BASEDIR=${GITHUB_WORKSPACE}"           >> "$GITHUB_ENV"
+          echo "CCACHE_NOHASHDIR=true"                        >> "$GITHUB_ENV"
+          echo "CCACHE_IGNOREOPTIONS=-sysroot* -fdebug-prefix-map=* -fmacro-prefix-map=*" >> "$GITHUB_ENV"
+          echo "CCACHE_COMPRESS=true"                         >> "$GITHUB_ENV"
+          echo "CCACHE_COMPRESSLEVEL=8"                       >> "$GITHUB_ENV"
+          echo "CCACHE_DIRECT=true"                           >> "$GITHUB_ENV"
+          echo "CCACHE_FILE_CLONE=true"                       >> "$GITHUB_ENV"
+          echo "CCACHE_INODE_CACHE=true"                      >> "$GITHUB_ENV"
+          echo "CCACHE_IS_KERNEL_COMPILING=true"              >> "$GITHUB_ENV"
+          echo "CCACHE_UMASK=002"                             >> "$GITHUB_ENV"
+          echo "KBUILD_BUILD_TIMESTAMP=2026-01-01"            >> "$GITHUB_ENV"
+          echo "CCACHE_SLOPPINESS=file_macro,time_macros,include_file_mtime,include_file_ctime,pch_defines,system_headers,locale,file_stat_matches" >> "$GITHUB_ENV"
 
           if ccache --help 2>&1 | grep -q 'depend_mode'; then
-              export CCACHE_DEPEND=true
-              echo "CCACHE_DEPEND=true" >> "$GITHUB_ENV"
+            echo "CCACHE_DEPEND=true" >> "$GITHUB_ENV"
           fi
+          echo "USE_CCACHE=1" >> "$GITHUB_ENV"
 
-          echo "USE_CCACHE=1" >> $GITHUB_ENV
-
-      - name: Cache CCache Files
-        if: github.event.inputs.cache == 'true'
+      - name: Restore CCache
+        if: inputs.cache == true
         uses: actions/cache/restore@v4
         with:
-           path: ${{ github.workspace }}/.ccache
-           key: ccache-${{ runner.os }}-${{ inputs.BASE_BRANCH }}-${{ github.run_id }}
-           restore-keys: |
-             ccache-${{ runner.os }}-${{ inputs.BASE_BRANCH }}-
+          path: ${{ github.workspace }}/.ccache
+          key: ccache-${{ runner.os }}-${{ inputs.BASE_BRANCH }}-${{ github.run_id }}
+          restore-keys: |
+            ccache-${{ runner.os }}-${{ inputs.BASE_BRANCH }}-
 
-      - name: Build Kernel && Images
+      - name: Build Kernel & Images
         run: |
-          if [ "${{ github.event.inputs.cache }}" = "true" ]; then
-            ccache -s
+          set -euo pipefail
+          if [ "${{ inputs.cache }}" = "true" ]; then
+            ccache --show-stats || true
           fi
           make mrproper
-          bash "$GITHUB_WORKSPACE"/build.sh
+          bash "${GITHUB_WORKSPACE}/build.sh"
 
-          if [ -f "build/Image" ]; then
-            cp "$GITHUB_WORKSPACE"/build/Image ./Image
-          else
-            echo "ERRO: Image não encontrada em build/Image"
-            exit 1
-          fi
-          
-          # == vendor_boot && dlkm packing
-          mkdir -p ${GITHUB_WORKSPACE}/artifacts
-          
-          # this will creat built_vendor && buitl_dlkm folders
-          bash "$GITHUB_WORKSPACE"/lkm-tools/run.sh
-          
-          cd "$GITHUB_WORKSPACE"/boot_editor_v15_r1
+          test -f "build/Image" || {
+            echo "::error::Kernel Image not found at build/Image — build failed"; exit 1;
+          }
+          cp "build/Image" ./Image
+          echo "::notice::Kernel Image built successfully"
 
-          # unpack the stock vendor_boot so build/unzip_boot/ exists
+      - name: Pack vendor_boot & dlkm
+        run: |
+          set -euo pipefail
+          mkdir -p "${GITHUB_WORKSPACE}/artifacts"
+
+          bash "${GITHUB_WORKSPACE}/lkm-tools/run.sh"
+
+          cd "${GITHUB_WORKSPACE}/boot_editor_v15_r1"
           ./gradlew unpack
 
-          # replace vendor modules
+          # swap out vendor modules in vendor_boot
           rm -fr build/unzip_boot/root.2/lib/modules/*
           mkdir -p build/unzip_boot/root.2/lib/modules
-          
-          # fix permissions and replace fstab aswell
-          chmod 744 "$GITHUB_WORKSPACE"/built_vendor/*
-          chmod 744 "$GITHUB_WORKSPACE"/boot_editor_v15_r1/fstab.s5e8535
-          
-          cp "$GITHUB_WORKSPACE"/boot_editor_v15_r1/fstab.s5e8535 build/unzip_boot/root.1/first_stage_ramdisk/
-          cp "$GITHUB_WORKSPACE"/boot_editor_v15_r1/fstab.s5e8535 build/unzip_boot/root.1
-          cp "$GITHUB_WORKSPACE"/built_vendor/* build/unzip_boot/root.2/lib/modules/
+          chmod 744 "${GITHUB_WORKSPACE}"/built_vendor/*
+          chmod 744 "${GITHUB_WORKSPACE}/boot_editor_v15_r1/fstab.s5e8535"
 
-          ./gradlew pack 
-          cp vendor_boot.img.signed "$GITHUB_WORKSPACE"/anykernel3/vendor_boot.img
-          
-          # == vendor_dlkm packing #m14_5g just refuses loading dlkm, so we will force it to load by packing them into a ksu_module.
-          
-          MODDIR=$(ls -d "$GITHUB_WORKSPACE"/custom_dlkm/vendor_dlkm/lib/modules/*/ | head -n1)
+          cp fstab.s5e8535 build/unzip_boot/root.1/first_stage_ramdisk/
+          cp fstab.s5e8535 build/unzip_boot/root.1
+          cp "${GITHUB_WORKSPACE}"/built_vendor/* build/unzip_boot/root.2/lib/modules/
 
-          cp -r "$MODDIR"* "$GITHUB_WORKSPACE"/lkm_loader/system/vendor/lib/modules/custom
-          
-      - name: Save CCache Files
-        if: ${{ always() && github.event.inputs.cache == 'true' }}
+          ./gradlew pack
+          cp vendor_boot.img.signed "${GITHUB_WORKSPACE}/anykernel3/vendor_boot.img"
+
+          # inject custom_dlkm modules into the loader module
+          MODDIR=$(ls -d "${GITHUB_WORKSPACE}"/custom_dlkm/vendor_dlkm/lib/modules/*/ | head -n1)
+          cp -r "$MODDIR"* "${GITHUB_WORKSPACE}/lkm_loader/system/vendor/lib/modules/custom"
+
+      - name: Save CCache
+        if: always() && inputs.cache == true
         uses: actions/cache/save@v4
         with:
           path: ${{ github.workspace }}/.ccache
           key: ccache-${{ runner.os }}-${{ inputs.BASE_BRANCH }}-${{ github.run_id }}
-          
-      - name: Update Module Files and Prop
+
+      - name: Update Module Metadata
+        env:
+          KERNEL_VERSION: ${{ steps.version.outputs.kernel_version }}
         run: |
-          python3 - <<'EOF'
+          set -euo pipefail
+          python3 <<'EOF'
           import json
           import os
 
-          version = os.environ.get("KERNEL_VERSION")
-          
-          # Calculate versionCode dynamically (e.g., 1.1 -> 1001, 1.2 -> 1002)
-          parts = version.split('.')
-          major = int(parts[0])
-          minor = int(parts[1]) if len(parts) > 1 else 0
-          new_version_code = major * 1000 + minor
+          version = os.environ["KERNEL_VERSION"]
+          parts = version.split(".")
+          major, minor = int(parts[0]), int(parts[1]) if len(parts) > 1 else 0
+          version_code = major * 1000 + minor
+          repo = "prisma-droid-off/XfireKernels"
+          zip_url = f"https://github.com/{repo}/releases/download/v{version}/Custom-LKM-Loader-{version}.zip"
 
-          # 1. Update update.json
-          json_path = "lkm_loader/update.json" 
+          # 1. update.json
+          json_path = "lkm_loader/update.json"
           data = {}
           if os.path.exists(json_path):
-              with open(json_path, "r") as f:
+              with open(json_path) as f:
                   data = json.load(f)
-
           data["version"] = version
-          data["versionCode"] = new_version_code
-
+          data["versionCode"] = version_code
+          data["zipUrl"] = zip_url
           with open(json_path, "w") as f:
               json.dump(data, f, indent=2)
               f.write("\n")
-          print(f"Successfully updated {json_path}")
+          print(f"updated {json_path} -> v{version}")
 
-          # 2. Update module.prop
+          # 2. module.prop
           prop_path = "lkm_loader/module.prop"
           if os.path.exists(prop_path):
-              lines = []
-              with open(prop_path, "r") as f:
-                  for line in f:
-                      if line.startswith("version="):
-                          lines.append(f"version={version}\n")
-                      elif line.startswith("versionCode="):
-                          lines.append(f"versionCode={new_version_code}\n")
-                      else:
-                          lines.append(line)
-              
+              with open(prop_path) as f:
+                  lines = f.readlines()
+              lines = [
+                  f"version={version}\n" if l.startswith("version=")
+                  else f"versionCode={version_code}\n" if l.startswith("versionCode=")
+                  else l
+                  for l in lines
+              ]
               with open(prop_path, "w") as f:
                   f.writelines(lines)
-              print(f"Successfully updated {prop_path}")
+              print(f"updated {prop_path} -> v{version}")
           else:
-              print(f"Warning: {prop_path} not found!")
+              print(f"::warning::{prop_path} not found")
           EOF
+
+      - name: Generate Changelog
         env:
-          KERNEL_VERSION: ${{ steps.version.outputs.kernel_version }}
+          VER: ${{ steps.version.outputs.kernel_version }}
+          REPO: ${{ github.repository }}
+        run: |
+          COMMITMSG=$(git log -1 --pretty=format:'- [`%h`](https://github.com/${{ github.repository }}/commit/%H) %s (built from)' 2>/dev/null || echo "- *(commit information unavailable)*")
+          awk -v ver="${VER}" -v date="$(date +%Y-%m-%d)" -v commit="${COMMITMSG}" '
+            { gsub(/__VERSION__/, ver)
+              gsub(/__DATE__/, date)
+              if (/__COMMITS__/) { print commit } else { print } }' <<'CHLOG' > lkm_loader/changelog.md
+          # Custom LKM Loader — XfireKernels
+
+          > Dynamic loadable kernel module (LKM) loader for Magisk / KernelSU / APatch.
+          > Base module by [ravindu644](https://github.com/ravindu644) · Maintained by [@prisma-droid-off](https://github.com/prisma-droid-off).
+
+          ---
+
+          ## v__VERSION__
+
+          **Release date:** __DATE__
+
+          ### Source Commit
+          __COMMITS__
+
+          ### Overview
+          This release refreshes the bundled custom LKMs (vendor / `vendor_dlkm` modules) shipped with the latest XfireKernels build, keeping your device's kernel modules in sync with the newest kernel Image.
+
+          ### Notes
+          - Module metadata (`module.prop`, `update.json`) is synchronized automatically by CI on every build.
+          - Requires the matching XfireKernels AnyKernel3 image (`XfireKernels_v__VERSION__.zip`) to be flashed first.
+
+          ### Installation
+          1. Flash the matching XfireKernels kernel image.
+          2. Flash `Custom-LKM-Loader-v__VERSION__.zip` in Magisk / KernelSU / APatch.
+          3. Reboot and verify modules load via `modprobe`.
+
+          ---
+
+          ## Support
+          For issues and updates, see the [XfireKernels repository](https://github.com/prisma-droid-off/XfireKernels) or open a GitHub issue.
+          CHLOG
+          echo "Generated lkm_loader/changelog.md for v${VER}"
 
       - name: Package Artifacts
         run: |
           set -euo pipefail
+          VER="${{ steps.version.outputs.kernel_version }}"
 
-          if [ -f "${GITHUB_WORKSPACE}/Image" ]; then
-            cp "${GITHUB_WORKSPACE}/Image" "${GITHUB_WORKSPACE}/anykernel3/"
-          elif [ -f "${GITHUB_WORKSPACE}/build/Image" ]; then
-            cp "${GITHUB_WORKSPACE}/build/Image" "${GITHUB_WORKSPACE}/anykernel3/"
-          else
-            echo "[x] Kernel Image not found!"
-            exit 1
-          fi
+          cp "${GITHUB_WORKSPACE}/Image" "${GITHUB_WORKSPACE}/anykernel3/"
 
-          cd ${GITHUB_WORKSPACE}/anykernel3
+          ( cd "${GITHUB_WORKSPACE}/anykernel3" && zip -r9 "${GITHUB_WORKSPACE}/artifacts/XfireKernels_v${VER}.zip" . )
 
-          ak3="XfireKernels_v${{ steps.version.outputs.kernel_version }}.zip"
-          zip -r9 "${GITHUB_WORKSPACE}/artifacts/${ak3}" ./*
-          
-          cd ${GITHUB_WORKSPACE}
-          
-          # vboot_modules
-          zip -r9 vboot_modules.zip built_vendor
-          cp vboot_modules.zip ${GITHUB_WORKSPACE}/artifacts/
-          
-          # custom_dlkm modules
-          cd ${GITHUB_WORKSPACE}/lkm_loader
-          lkm_zip="Custom-LKM-Loader-${{ steps.version.outputs.kernel_version }}.zip"
-    
-          zip -r9 "${lkm_zip}" .
-          cp "${lkm_zip}" "${GITHUB_WORKSPACE}/artifacts/"
-    
-      - name: Commit and Push Updates
+          ( cd "${GITHUB_WORKSPACE}" && zip -r9 artifacts/vboot_modules.zip built_vendor )
+
+          ( cd "${GITHUB_WORKSPACE}/lkm_loader" &&
+            zip -r9 "${GITHUB_WORKSPACE}/artifacts/Custom-LKM-Loader-${VER}.zip" . )
+
+          echo "Artifacts:"
+          ls -lh "${GITHUB_WORKSPACE}/artifacts"
+
+      - name: Commit & Push Updates
+        env:
+          BASE_BRANCH: ${{ inputs.BASE_BRANCH }}
         run: |
-          git config --global user.name "prisma-droid-off"
-          git config --global user.email "futebolista596@gmail.com"
-          
-          git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
-          
-          git add lkm_loader/update.json lkm_loader/module.prop
-          
-          # Apenas efetua o commit e push se existirem alterações reais
-          git diff --cached --quiet || git commit -m "CI: Update module version to v${{ steps.version.outputs.kernel_version }} [skip ci]"
-          git push origin HEAD:${{ github.event.inputs.BASE_BRANCH || 'main' }}
+          set -euo pipefail
+          git config user.name "prisma-droid-off"
+          git config user.email "futebolista596@gmail.com"
+          git remote set-url origin "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
+
+          git add lkm_loader/update.json lkm_loader/module.prop lkm_loader/changelog.md
+
+          git diff --cached --quiet || git commit -m "CI: bump module metadata & changelog to v${{ steps.version.outputs.kernel_version }} [skip ci]"
+
+          # long builds may outlive other pushes — rebase before pushing
+          git pull --rebase --autostash origin "${BASE_BRANCH:-main}"
+          git push origin "HEAD:${BASE_BRANCH:-main}"
 
       - name: GitHub Release
-        if: github.event.inputs.MAKE_RELEASE == 'true'
-        uses: softprops/action-gh-release@v3
+        if: inputs.MAKE_RELEASE == true
+        uses: softprops/action-gh-release@v2
         with:
           name: Xfire Kernels v${{ steps.version.outputs.kernel_version }}
           tag_name: v${{ steps.version.outputs.kernel_version }}
           body: |
             > [!WARNING]
-            > **DISCLAIMER:** I am not responsible for bricks, or anything of kind. Flash at your own risk! 
+            > **DISCLAIMER:** I am not responsible for bricks or any other damage. Flash at your own risk!
 
-            *Kernel Version: v${{ steps.version.outputs.kernel_version }}*
-            *Compiled using: clang-r450784e (LLVM)*
-            *This release was automatically generated by GitHub Actions.*
+            **Kernel Version:** v${{ steps.version.outputs.kernel_version }}
+            **Compiler:** clang-r450784e (LLVM)
+            **Generated automatically by GitHub Actions.**
           files: |
             ${{ github.workspace }}/artifacts/*
         env:
-            GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
