@@ -14,6 +14,10 @@ custom_modules=(
     "macvlan.ko"
     "ip_vs.ko"
     "br_netfilter.ko"
+    "ip_vs_nfct.ko"
+    "ip_vs_proto_tcp.ko"
+    "ip_vs_rr.ko"
+    "ip_vs_proto_udp.ko"
 )
 
 # Loop through the array properly
