@@ -9,7 +9,7 @@ IMMUTABLE_ENABLE=true
 LP_ENABLE=true
 UMH_RESTRICTION_ENABLE=true
 TRUSTED_MAP_ENABLE=false
-USER_BUILD=false
+USER_BUILD=true
 INTEGRITY_ENABLE=false
 
 # Additional debug
@@ -27,7 +27,6 @@ else
 endif
 
 ifneq ($(wildcard $(srctree)/include/crypto/internal/rsa.h),)
-    $(warning [DEFEX] INTEGRITY_ENABLE)
     INTEGRITY_ENABLE=false
 endif
 
@@ -151,23 +150,6 @@ ifeq ($(USER_BUILD), true)
     $(warning [DEFEX] DEBUG_DISABLE)
     ifeq ($(CONFIG_SECURITY_DSMS), y)
         DEFEX_DEFINES += -DDEFEX_DSMS_ENABLE
-    endif
-else
-    $(warning [DEFEX] DEBUG_ENABLE)
-    defex-y += debug/defex_debug.o
-    defex-y += core/defex_sysfs.o
-    DEFEX_DEFINES += -DDEFEX_PERMISSIVE_INT
-    DEFEX_DEFINES += -DDEFEX_PERMISSIVE_SP
-    DEFEX_DEFINES += -DDEFEX_PERMISSIVE_TM
-    DEFEX_DEFINES += -DDEFEX_PERMISSIVE_IM
-    DEFEX_DEFINES += -DDEFEX_PERMISSIVE_LP
-    DEFEX_DEFINES += -DDEFEX_DEBUG_ENABLE
-    ifeq ($(LOG_BUFFER_ENABLE), true)
-        DEFEX_DEFINES += -DDEFEX_LOG_BUFFER_ENABLE
-    endif
-    ifeq ($(SHOW_RULES_ENABLE), true)
-	defex-y += debug/defex_rules_show.o
-	DEFEX_DEFINES += -DDEFEX_SHOW_RULES_ENABLE
     endif
 endif
 
