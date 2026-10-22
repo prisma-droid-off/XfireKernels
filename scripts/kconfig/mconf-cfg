@@ -1,2 +1,0 @@
-cflags="-DNCURSES_WIDECHAR -I/data/data/com.termux/files/usr/include"
-libs="-L/data/data/com.termux/files/usr/lib -Wl,-rpath=/data/data/com.termux/files/usr/lib -Wl,--enable-new-dtags -lncursesw"
