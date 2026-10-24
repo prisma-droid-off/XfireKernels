@@ -1,8 +1,4 @@
 export ZIPFILE="$ZIPFILE"
-export TMPDIR="$TMPDIR"
-
-unzip -o "$ZIPFILE" 'META-INF/*' -d "$TMPDIR" >&2
-. "$TMPDIR/META-INF/com/google/android/util_functions.sh"
 
 SKIPMOUNT=false
 PROPFILE=false
@@ -28,13 +24,13 @@ on_install() {
   [ -f /data/adb/lkm_loader/pinned ] || : > /data/adb/lkm_loader/pinned
 
   chmod 755 "$MODPATH/bin/lkmctl"
-  # pin every module shipped in this build; already-known modules keep their state
-  "$MODPATH/bin/lkmctl" syncpins >&2
+  # register shipped modules; nothing is pinned/loaded by default
+  "$MODPATH/bin/lkmctl" sync >&2
 
   ui_print " "
-  ui_print "- Pinned modules load automatically at boot."
-  ui_print "- Open the module WebUI (KernelSU/APatch) to"
-  ui_print "  load/unload or pin individual modules."
+  ui_print "- Nothing loads at boot by default."
+  ui_print "- Pin modules in the WebUI to load them"
+  ui_print "  automatically on every boot."
   ui_print " "
 }
 
@@ -42,7 +38,6 @@ set_permissions() {
   set_perm_recursive $MODPATH 0 0 0755 0644
 
   set_perm $MODPATH/post-fs-data.sh 0 0 0755
-  set_perm $MODPATH/action.sh 0 0 0755
   set_perm $MODPATH/bin/lkmctl 0 0 0755
   set_perm_recursive $MODPATH/webroot 0 0 0755 0644
 

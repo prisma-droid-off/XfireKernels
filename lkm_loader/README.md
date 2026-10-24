@@ -18,8 +18,7 @@ This module reproduces the stock module-loading pipeline with `modprobe`, so you
 - **On-demand load / unload** any module at runtime
 - **Boot pinning** — choose exactly which modules load automatically at every boot
 - **WebUI** (KernelSU / APatch) — search, toggle modules, manage pins with a clean black & white interface
-- **Smart defaults** — newly shipped modules are pinned automatically; modules you unpinned stay unpinned across updates
-- **Action-button fallback** for managers without WebUI support (toggle all loaded / pinned)
+- **Off by default** — nothing loads at boot until you pin it; pin choices persist across updates
 - Boot log at `/data/adb/lkm_loader/boot.log`
 
 ## WebUI
@@ -35,7 +34,7 @@ Open the module card in **KernelSU** or **APatch** and tap **Open** / **WebUI**.
 | Unload all | Unload every loaded module (reverse dependency order) |
 | Pin all / Clear pins | Bulk-edit the boot list |
 
-Magisk does not support module WebUIs — use the Action button or the CLI below.
+Magisk does not support module WebUIs — use the CLI below.
 
 ## CLI
 
@@ -57,16 +56,15 @@ sh /data/adb/modules/lkm_loader/bin/lkmctl unpinall
 sh /data/adb/modules/lkm_loader/bin/lkmctl loadpins    # load pinned set now
 sh /data/adb/modules/lkm_loader/bin/lkmctl loadall
 sh /data/adb/modules/lkm_loader/bin/lkmctl unloadall
-sh /data/adb/modules/lkm_loader/bin/lkmctl toggleall   # Action-button behaviour
 sh /data/adb/modules/lkm_loader/bin/lkmctl status
 ```
 
-State lives in `/data/adb/lkm_loader/` (`known`, `pinned`, `boot.log`) and survives module updates.
+Only pinned modules load at boot. State lives in `/data/adb/lkm_loader/` (`known`, `pinned`, `boot.log`) and survives module updates; load/unload actions are runtime-only and reset on reboot.
 
 ## Installation
 
 1. Flash the module zip in Magisk / KernelSU / APatch.
-2. Reboot — every module shipped in the build is pinned and loads automatically.
+2. Reboot — nothing loads automatically yet; pin the modules you want to boot.
 3. Open the WebUI (or use the CLI) to customise the set.
 
 For GKI kernels that also ship modules in `vendor_boot`, flash the matching `vendor_boot.img` right after installing the module — see below.
@@ -141,7 +139,6 @@ lkm_loader/
 ├── bin/lkmctl
 ├── webroot/                 # WebUI
 ├── post-fs-data.sh          # boot pin loader
-├── action.sh
 ├── system/vendor/lib/modules/custom/
 │   ├── your_module1.ko
 │   ├── your_module2.ko
@@ -159,7 +156,7 @@ lkm_loader/
 
 - **A module fails to load** — confirm it was built with the exact same kernel tree/config as the running kernel.
 - **A module fails to unload** — something else is using it (`lsmod` shows a non-zero refcount); reboot or unload the dependent module first.
-- **Nothing loads at boot** — check `/data/adb/lkm_loader/boot.log` and the pin list (`lkmctl list`).
+- **Nothing loads at boot** — expected until you pin modules; check the pin list with `lkmctl list` and `/data/adb/lkm_loader/boot.log` for failures.
 - **GKI-specific issues** — make sure the matching modified `vendor_boot.img` was flashed together with this module.
 
 ## Credits

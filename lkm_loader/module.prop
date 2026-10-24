@@ -4,4 +4,4 @@ version=1.28
 versionCode=1028
 author=@prisma_alt
 updateJson=https://github.com/prisma-droid-off/XfireKernels/raw/main/lkm_loader/update.json
-description=Load and unload custom LKMs on demand with a WebUI. Credits to ravindu644.
+description=Load and unload custom LKMs on demand with a WebUI. Nothing loads at boot until pinned. Credits to ravindu644.

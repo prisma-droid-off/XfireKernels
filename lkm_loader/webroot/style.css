@@ -25,6 +25,7 @@ body {
   font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
   -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: contain;
 }
 
 .app {
@@ -166,11 +167,12 @@ body {
   align-items: center;
   gap: 12px;
   padding: 12px 14px;
-  transition: background .15s var(--ease), opacity .15s var(--ease);
-  animation: rise .22s var(--ease) both;
+  transition: background .12s linear, opacity .12s linear;
+  animation: rise .2s var(--ease) both;
 }
 .row + .row { border-top: 1px solid var(--line); }
 .row:hover { background: #0e0e0e; }
+.row:active { background: #111; }
 .row.busy { opacity: .45; pointer-events: none; }
 
 @keyframes rise {
@@ -212,6 +214,7 @@ body {
 .row.loaded .state { color: var(--muted); }
 
 .pin {
+  touch-action: manipulation;
   flex: none;
   width: 32px;
   height: 32px;
@@ -232,6 +235,7 @@ body {
 
 .switch {
   position: relative;
+  touch-action: manipulation;
   flex: none;
   width: 40px;
   height: 23px;
@@ -318,6 +322,14 @@ code {
   color: var(--faint);
 }
 .foot b { font-weight: 600; color: var(--muted); }
+
+.hint {
+  margin: 10px 0 0;
+  text-align: center;
+  font-size: 10.5px;
+  letter-spacing: .02em;
+  color: var(--faint);
+}
 
 .toast {
   position: fixed;

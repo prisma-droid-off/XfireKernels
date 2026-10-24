@@ -26,9 +26,11 @@
   };
 
   var state = { modules: [], total: 0, loaded: 0, pinned: 0, query: '' };
-  var busy = {};
+  var rows = Object.create(null);
+  var busy = Object.create(null);
   var toastTimer = null;
-  var firstRender = true;
+  var renderQueued = false;
+  var entered = false;
 
   var PIN_OUTLINE =
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" ' +
@@ -70,7 +72,7 @@
     el.toast.classList.toggle('error', !!isError);
     el.toast.classList.add('show');
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(function () { el.toast.classList.remove('show'); }, 2600);
+    toastTimer = setTimeout(function () { el.toast.classList.remove('show'); }, 2400);
     if (isError && hasKsu && typeof ksu.toast === 'function') {
       try { ksu.toast(msg); } catch (e) { /* ignore */ }
     }
@@ -92,26 +94,39 @@
     state.total = data.total;
     state.loaded = data.loaded;
     state.pinned = data.pinned;
-    renderSummary();
-    renderList();
+    scheduleRender();
   }
 
-  function renderSummary() {
-    el.total.textContent = state.total;
-    el.loaded.textContent = state.loaded;
-    el.pinned.textContent = state.pinned;
+  function find(name) {
+    for (var i = 0; i < state.modules.length; i++) {
+      if (state.modules[i].name === name) return state.modules[i];
+    }
+    return null;
   }
 
   // ------------------------------------------------------------ render
 
-  function matches(m) {
-    return !state.query || m.name.toLowerCase().indexOf(state.query) !== -1;
+  function scheduleRender() {
+    if (renderQueued) return;
+    renderQueued = true;
+    requestAnimationFrame(function () {
+      renderQueued = false;
+      render();
+    });
   }
 
-  function buildRow(m) {
+  function matches(m) {
+    return !state.query || (m._q || (m._q = m.name.toLowerCase())).indexOf(state.query) !== -1;
+  }
+
+  function setText(node, text) {
+    if (node.textContent !== text) node.textContent = text;
+  }
+
+  function createRow(name) {
     var row = document.createElement('div');
-    row.className = 'row' + (m.loaded ? ' loaded' : '') + (busy[m.name] ? ' busy' : '');
-    row.dataset.name = m.name;
+    row.className = 'row';
+    row.dataset.name = name;
 
     var dot = document.createElement('span');
     dot.className = 'dot';
@@ -119,119 +134,207 @@
     var info = document.createElement('div');
     info.className = 'info';
 
-    var name = document.createElement('span');
-    name.className = 'name';
-    name.textContent = m.name;
-    name.title = m.name + '.ko';
+    var nm = document.createElement('span');
+    nm.className = 'name';
+    nm.textContent = name;
+    nm.title = name + '.ko';
 
     var st = document.createElement('span');
     st.className = 'state';
-    st.textContent = m.loaded ? 'Loaded' : 'Not loaded';
 
-    info.appendChild(name);
+    info.appendChild(nm);
     info.appendChild(st);
 
     var pin = document.createElement('button');
     pin.type = 'button';
-    pin.className = 'pin' + (m.pinned ? ' pinned' : '');
-    pin.innerHTML = m.pinned ? PIN_FILLED : PIN_OUTLINE;
-    pin.title = m.pinned ? 'Loads on boot (click to unpin)' : 'Pin to load on boot';
-    pin.setAttribute('aria-label', pin.title + ': ' + m.name);
-    pin.setAttribute('aria-pressed', m.pinned ? 'true' : 'false');
-    pin.addEventListener('click', function () { togglePin(m); });
+    pin.className = 'pin';
+    pin.setAttribute('aria-pressed', 'false');
 
     var sw = document.createElement('button');
     sw.type = 'button';
-    sw.className = 'switch' + (m.loaded ? ' on' : '');
+    sw.className = 'switch';
     sw.setAttribute('role', 'switch');
-    sw.setAttribute('aria-checked', m.loaded ? 'true' : 'false');
-    sw.setAttribute('aria-label', m.name);
-    sw.title = m.loaded ? 'Unload' : 'Load';
-    sw.addEventListener('click', function () { toggleLoad(m); });
+    sw.setAttribute('aria-label', name);
 
     row.appendChild(dot);
     row.appendChild(info);
     row.appendChild(pin);
     row.appendChild(sw);
+
+    row._pin = pin;
+    row._sw = sw;
+    row._state = st;
     return row;
   }
 
-  function renderList() {
-    var visible = state.modules.filter(matches);
+  function patchRow(row, m) {
+    var wantRow = 'row' + (m.loaded ? ' loaded' : '') + (busy[m.name] ? ' busy' : '');
+    if (row.className !== wantRow) row.className = wantRow;
 
-    el.list.textContent = '';
-    el.list.setAttribute('aria-busy', 'false');
+    setText(row._state, m.loaded ? 'Loaded' : 'Not loaded');
+    row._state.classList.toggle('on', !!m.loaded);
 
-    var hasModules = state.modules.length > 0;
-    el.empty.hidden = hasModules && visible.length > 0;
-
-    if (!hasModules) {
-      el.empty.querySelector('p').textContent = 'No modules';
-      el.empty.querySelector('span').innerHTML =
-        'Place <code>.ko</code> files in <code>/vendor/lib/modules/custom</code>';
-    } else if (visible.length === 0) {
-      el.empty.querySelector('p').textContent = 'No matches';
-      el.empty.querySelector('span').textContent = 'Nothing matches "' + state.query + '"';
+    var pin = row._pin;
+    var pinCls = 'pin' + (m.pinned ? ' pinned' : '');
+    if (pin.className !== pinCls) pin.className = pinCls;
+    if (pin.dataset.pinned !== String(m.pinned)) {
+      pin.dataset.pinned = String(m.pinned);
+      pin.innerHTML = m.pinned ? PIN_FILLED : PIN_OUTLINE;
+      pin.title = m.pinned ? 'Loads on boot · click to unpin' : 'Pin to load on boot';
+      pin.setAttribute('aria-label', pin.title + ': ' + m.name);
+      pin.setAttribute('aria-pressed', m.pinned ? 'true' : 'false');
     }
 
-    var frag = document.createDocumentFragment();
-    visible.forEach(function (m, i) {
-      var row = buildRow(m);
-      if (!firstRender) row.style.animation = 'none';
-      row.style.animationDelay = (i * 12) + 'ms';
-      frag.appendChild(row);
-    });
-    el.list.appendChild(frag);
-    if (!firstRender) el.list.classList.add('list');
-    firstRender = false;
+    var sw = row._sw;
+    var swCls = 'switch' + (m.loaded ? ' on' : '');
+    if (sw.className !== swCls) sw.className = swCls;
+    var checked = m.loaded ? 'true' : 'false';
+    if (sw.getAttribute('aria-checked') !== checked) sw.setAttribute('aria-checked', checked);
+    var swTitle = m.loaded ? 'Unload' : 'Load';
+    if (sw.title !== swTitle) sw.title = swTitle;
+  }
+
+  function render() {
+    var visible = state.modules.filter(matches);
+    var hasModules = state.modules.length > 0;
+
+    // summary
+    setText(el.total, String(state.total));
+    setText(el.loaded, String(state.loaded));
+    setText(el.pinned, String(state.pinned));
+
+    // empty state
+    var showEmpty = !hasModules || visible.length === 0;
+    if (el.empty.hidden === showEmpty) {
+      if (!hasModules) {
+        el.empty.querySelector('p').textContent = 'No modules';
+        el.empty.querySelector('span').innerHTML =
+          'Place <code>.ko</code> files in <code>/vendor/lib/modules/custom</code>';
+      } else {
+        el.empty.querySelector('p').textContent = 'No matches';
+        el.empty.querySelector('span').textContent = 'Nothing matches "' + state.query + '"';
+      }
+    }
+    if (el.empty.hidden !== !showEmpty) el.empty.hidden = !showEmpty;
+    if (el.list.hidden !== showEmpty) el.list.hidden = showEmpty;
+
+    if (showEmpty) {
+      for (var key in rows) {
+        if (!rows[key].parentNode) { delete rows[key]; continue; }
+        rows[key].parentNode.removeChild(rows[key]);
+        delete rows[key];
+      }
+      el.list.setAttribute('aria-busy', 'false');
+      return;
+    }
+
+    var skeleton = el.list.querySelector('.skeleton');
+    if (skeleton) skeleton.remove();
+
+    // reconcile in place: only move nodes that are out of order
+    var seen = Object.create(null);
+    var prev = null;
+    for (var i = 0; i < visible.length; i++) {
+      var m = visible[i];
+      seen[m.name] = true;
+      var row = rows[m.name];
+      if (!row) {
+        row = rows[m.name] = createRow(m.name);
+        row.classList.add('enter');
+        row.style.animationDelay = Math.min(i, 8) * 14 + 'ms';
+      }
+      patchRow(row, m);
+      var anchor = prev ? prev.nextSibling : el.list.firstChild;
+      if (row !== anchor) el.list.insertBefore(row, anchor);
+      prev = row;
+    }
+
+    // drop rows that are no longer visible
+    for (var name in rows) {
+      if (!seen[name]) {
+        if (rows[name].parentNode) rows[name].parentNode.removeChild(rows[name]);
+        delete rows[name];
+      }
+    }
+
+    if (!entered) {
+      entered = true;
+      setTimeout(function () {
+        for (var n in rows) rows[n].classList.remove('enter');
+      }, 420);
+    }
+
+    el.list.setAttribute('aria-busy', 'false');
   }
 
   // ------------------------------------------------------------ actions
 
   function setBusy(name, value) {
     if (value) busy[name] = true; else delete busy[name];
-    var row = el.list.querySelector('.row[data-name="' + cssEscape(name) + '"]');
+    var row = rows[name];
     if (row) row.classList.toggle('busy', !!value);
-  }
-
-  function cssEscape(v) {
-    return String(v).replace(/["\\]/g, '\\$&');
   }
 
   async function runAction(fn) {
     try {
       var res = await fn();
-      toast((res && res.message) || 'Done', res && res.ok === false);
+      if (res && res.ok === false) toast(res.message || 'Failed', true);
+      else toast((res && res.message) || 'Done');
+      return res;
     } catch (e) {
       toast(e.message || String(e), true);
+      return { ok: false };
+    } finally {
+      loadList().catch(function () { /* keep current view */ });
     }
-    await loadList().catch(function () { /* keep old view */ });
   }
 
   function toggleLoad(m) {
+    var before = !!m.loaded;
+    m.loaded = !before;                 // optimistic
+    state.loaded += m.loaded ? 1 : -1;
+    scheduleRender();
+
     setBusy(m.name, true);
-    var name = m.name;
     runAction(function () {
-      return call((m.loaded ? 'unload ' : 'load ') + q(name));
-    }).then(function () { setBusy(name, false); });
+      return call((before ? 'unload ' : 'load ') + q(m.name));
+    }).then(function (res) {
+      if (res && res.ok === false) {
+        m.loaded = before;              // revert
+        state.loaded += before ? 1 : -1;
+        scheduleRender();
+      }
+    }).then(function () { setBusy(m.name, false); });
   }
 
   function togglePin(m) {
+    var before = !!m.pinned;
+    m.pinned = !before;                 // optimistic
+    state.pinned += m.pinned ? 1 : -1;
+    scheduleRender();
+
     setBusy(m.name, true);
-    var name = m.name;
     runAction(function () {
-      return call((m.pinned ? 'unpin ' : 'pin ') + q(name));
-    }).then(function () { setBusy(name, false); });
+      return call((before ? 'unpin ' : 'pin ') + q(m.name));
+    }).then(function (res) {
+      if (res && res.ok === false) {
+        m.pinned = before;
+        state.pinned += before ? 1 : -1;
+        scheduleRender();
+      }
+    }).then(function () { setBusy(m.name, false); });
   }
 
   async function refresh() {
     el.refresh.classList.add('busy');
-    el.list.setAttribute('aria-busy', 'true');
+    if (!el.list.firstChild) el.list.setAttribute('aria-busy', 'true');
     try {
       await loadList();
     } catch (e) {
       el.list.textContent = '';
+      rows = Object.create(null);
       el.list.setAttribute('aria-busy', 'false');
+      el.list.hidden = true;
       el.empty.hidden = false;
       el.empty.querySelector('p').textContent = 'Unable to read modules';
       el.empty.querySelector('span').textContent = 'Check that the module is installed and active.';
@@ -241,7 +344,7 @@
     }
   }
 
-  async function bulk(btn, args, fallback) {
+  async function bulk(args, fallback) {
     var group = el.loadPinned.parentNode.querySelectorAll('button');
     group.forEach(function (b) { b.disabled = true; });
     try {
@@ -257,19 +360,33 @@
 
   // ------------------------------------------------------------ events
 
-  el.refresh.addEventListener('click', refresh);
+  el.list.addEventListener('click', function (e) {
+    var btn = e.target.closest ? e.target.closest('button') : null;
+    if (!btn) return;
+    var row = btn.closest('.row');
+    if (!row) return;
+    var m = find(row.dataset.name);
+    if (!m) return;
+    if (btn.classList.contains('switch')) toggleLoad(m);
+    else if (btn.classList.contains('pin')) togglePin(m);
+  });
 
+  var searchTimer = null;
   el.search.addEventListener('input', function () {
-    state.query = el.search.value.trim().toLowerCase();
-    el.clear.hidden = !state.query;
-    renderList();
+    var v = el.search.value.trim().toLowerCase();
+    el.clear.hidden = !v;
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(function () {
+      state.query = v;
+      scheduleRender();
+    }, 70);
   });
 
   el.clear.addEventListener('click', function () {
     el.search.value = '';
     state.query = '';
     el.clear.hidden = true;
-    renderList();
+    scheduleRender();
     el.search.focus();
   });
 
@@ -278,14 +395,15 @@
       el.search.value = '';
       state.query = '';
       el.clear.hidden = true;
-      renderList();
+      scheduleRender();
     }
   });
 
-  el.loadPinned.addEventListener('click', function () { bulk(this, 'loadpins', 'Loaded pinned'); });
-  el.unloadAll.addEventListener('click', function () { bulk(this, 'unloadall', 'Unloaded all'); });
-  el.pinAll.addEventListener('click', function () { bulk(this, 'pinall', 'Pinned all'); });
-  el.unpinAll.addEventListener('click', function () { bulk(this, 'unpinall', 'Cleared pins'); });
+  el.refresh.addEventListener('click', refresh);
+  el.loadPinned.addEventListener('click', function () { bulk('loadpins', 'Loaded pinned'); });
+  el.unloadAll.addEventListener('click', function () { bulk('unloadall', 'Unloaded all'); });
+  el.pinAll.addEventListener('click', function () { bulk('pinall', 'Pinned all'); });
+  el.unpinAll.addEventListener('click', function () { bulk('unpinall', 'Cleared pins'); });
 
   document.addEventListener('visibilitychange', function () {
     if (!document.hidden) refresh();
@@ -295,8 +413,8 @@
 
   if (!hasKsu) {
     el.noApi.hidden = false;
-    el.list.textContent = '';
-    el.list.setAttribute('aria-busy', 'false');
+    el.list.hidden = true;
+    el.empty.hidden = true;
     [el.refresh, el.search, el.loadPinned, el.unloadAll, el.pinAll, el.unpinAll]
       .forEach(function (n) { n.disabled = true; });
     return;

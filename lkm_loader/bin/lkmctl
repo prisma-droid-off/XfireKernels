@@ -74,16 +74,13 @@ ordered_names() {
 
 reverse_lines() { sed '1!G;h;$!d'; }
 
-# every module seen for the first time is pinned + loaded on next boot,
-# while modules the user explicitly unpinned stay unpinned across updates
-sync_pins() {
+# new modules are only recorded as known: nothing loads at boot until the
+# user pins it, and explicit pin choices persist across module updates
+sync_known() {
     for f in "$KMOD_DIR"/*.ko; do
         [ -e "$f" ] || continue
         n=${f##*/}; n=${n%.ko}
-        if ! grep -qxF -- "$n" "$KNOWN_FILE"; then
-            printf '%s\n' "$n" >> "$KNOWN_FILE"
-            printf '%s\n' "$n" >> "$PIN_FILE"
-        fi
+        grep -qxF -- "$n" "$KNOWN_FILE" || printf '%s\n' "$n" >> "$KNOWN_FILE"
     done
 }
 
@@ -100,7 +97,7 @@ valid_name() {
 # ---------------------------------------------------------------------------
 
 cmd_list() {
-    sync_pins
+    sync_known
     items=""
     first=1
     total=0
@@ -166,7 +163,7 @@ cmd_unpin() {
 
 cmd_loadpins() {
     [ -f "$BOOT_LOG" ] && : > "$BOOT_LOG"
-    sync_pins
+    sync_known
     cnt=0; okn=0; failed=0
     errs=""
     for n in $(ordered_names); do
@@ -193,7 +190,7 @@ cmd_loadpins() {
 }
 
 cmd_loadall() {
-    sync_pins
+    sync_known
     cnt=0; okn=0; failed=0; errs=""
     for n in $(ordered_names); do
         [ -f "$KMOD_DIR/$n.ko" ] || continue
@@ -231,15 +228,6 @@ cmd_unloadall() {
     [ $failed -eq 0 ]
 }
 
-cmd_toggleall() {
-    for f in "$KMOD_DIR"/*.ko; do
-        [ -e "$f" ] || continue
-        n=${f##*/}; n=${n%.ko}
-        if is_loaded "$n"; then cmd_unloadall; return $?; fi
-    done
-    cmd_loadpins
-}
-
 cmd_pinall() {
     for f in "$KMOD_DIR"/*.ko; do
         [ -e "$f" ] || continue
@@ -255,8 +243,8 @@ cmd_unpinall() {
     emit true "boot pin list cleared"
 }
 
-cmd_syncpins() {
-    sync_pins
+cmd_sync() {
+    sync_known
     emit true "module list synchronized"
 }
 
@@ -285,13 +273,12 @@ case "${1:-}" in
     loadpins|apply) cmd_loadpins ;;
     loadall)    cmd_loadall ;;
     unloadall)  cmd_unloadall ;;
-    toggle|toggleall) cmd_toggleall ;;
     pinall)     cmd_pinall ;;
     unpinall)   cmd_unpinall ;;
-    syncpins)   cmd_syncpins ;;
+    sync)       cmd_sync ;;
     status)     cmd_status ;;
     *)
-        printf 'usage: %s {list|load <mod>|unload <mod>|pin <mod>|unpin <mod>|loadpins|loadall|unloadall|toggleall|pinall|unpinall|status}\n' "$0" >&2
+        printf 'usage: %s {list|load <mod>|unload <mod>|pin <mod>|unpin <mod>|loadpins|loadall|unloadall|pinall|unpinall|sync|status}\n' "$0" >&2
         exit 2
         ;;
 esac
