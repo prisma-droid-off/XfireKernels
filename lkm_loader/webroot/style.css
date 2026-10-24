@@ -244,7 +244,7 @@ body {
   border-radius: 999px;
   background: transparent;
   cursor: pointer;
-  transition: background .2s var(--ease), border-color .2s var(--ease);
+  transition: background .16s var(--ease), border-color .16s var(--ease);
 }
 .switch::after {
   content: "";
@@ -255,7 +255,7 @@ body {
   height: 15px;
   border-radius: 50%;
   background: var(--muted);
-  transition: transform .2s var(--ease), background .2s var(--ease);
+  transition: transform .16s var(--ease), background .16s var(--ease);
 }
 .switch:hover { border-color: #333; }
 .switch.on {
@@ -331,48 +331,6 @@ code {
   color: var(--faint);
 }
 
-.logs {
-  margin-top: 20px;
-  border-top: 1px solid var(--line);
-  padding-top: 12px;
-}
-.logs summary {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  cursor: pointer;
-  list-style: none;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--muted);
-  user-select: none;
-  -webkit-user-select: none;
-}
-.logs summary::-webkit-details-marker { display: none; }
-.logs[open] summary { color: var(--text); }
-.logs-state {
-  font-size: 10.5px;
-  font-weight: 400;
-  letter-spacing: .02em;
-  color: var(--faint);
-}
-.logs pre {
-  margin: 10px 0 0;
-  padding: 10px 12px;
-  max-height: 220px;
-  overflow: auto;
-  background: var(--field);
-  border: 1px solid var(--line);
-  border-radius: 9px;
-  color: var(--muted);
-  font: 11px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  white-space: pre-wrap;
-  word-break: break-word;
-  overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch;
-}
-.logs pre.idle { color: var(--faint); }
 
 .toast {
   position: fixed;

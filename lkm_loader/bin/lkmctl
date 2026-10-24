@@ -12,7 +12,6 @@ STATE_DIR="${LKMCTL_STATE_DIR:-/data/adb/lkm_loader}"
 KNOWN_FILE="$STATE_DIR/known"
 PIN_FILE="$STATE_DIR/pinned"
 BOOT_LOG="$STATE_DIR/boot.log"
-ACT_LOG="$STATE_DIR/actions.log"
 PROC_MODULES="${LKMCTL_PROC_MODULES:-/proc/modules}"
 
 MODPROBE="${LKMCTL_MODPROBE:-$(command -v modprobe 2>/dev/null || true)}"
@@ -28,11 +27,6 @@ mkdir -p "$STATE_DIR" 2>/dev/null
 
 json_escape() {
     printf '%s' "$1" | tr '\n\r\t' '   ' | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'
-}
-
-log_action() {
-    msg=$(printf '%s' "$*" | tr '\n\r\t' '   ')
-    printf '%s | %s\n' "$(date +%H:%M:%S)" "$msg" >> "$ACT_LOG" 2>/dev/null || true
 }
 
 emit() {
@@ -128,10 +122,8 @@ cmd_load() {
     if is_loaded "$n"; then emit true "$n is already loaded"; return 0; fi
     out=$("$MODPROBE" -d "$KMOD_DIR" "$n" 2>&1); rc=$?
     if [ $rc -eq 0 ]; then
-        log_action "load $n: ok"
         emit true "loaded $n"
     else
-        log_action "load $n: failed: $out"
         emit false "failed to load $n: $out"
     fi
     return $rc
@@ -143,10 +135,8 @@ cmd_unload() {
     if ! is_loaded "$n"; then emit true "$n is not loaded"; return 0; fi
     out=$("$MODPROBE" -r -d "$KMOD_DIR" "$n" 2>&1); rc=$?
     if [ $rc -eq 0 ]; then
-        log_action "unload $n: ok"
         emit true "unloaded $n"
     else
-        log_action "unload $n: failed: $out"
         emit false "failed to unload $n (in use?): $out"
     fi
     return $rc
@@ -156,7 +146,6 @@ cmd_pin() {
     n=${1:-}
     valid_name "$n" || { emit false "module not found: ${n:-?}"; return 1; }
     is_pinned "$n" || printf '%s\n' "$n" >> "$PIN_FILE"
-    log_action "pin $n"
     emit true "$n pinned to boot"
 }
 
@@ -167,7 +156,6 @@ cmd_unpin() {
         grep -vxF -- "$n" "$PIN_FILE" > "$PIN_FILE.tmp" 2>/dev/null
         mv "$PIN_FILE.tmp" "$PIN_FILE"
     fi
-    log_action "unpin $n"
     emit true "$n removed from boot"
 }
 
@@ -191,7 +179,6 @@ cmd_loadpins() {
             printf 'fail %s: %s\n' "$n" "$out" >> "$BOOT_LOG"
         fi
     done
-    log_action "loadpins: $okn ok, $failed failed"
     if [ $failed -eq 0 ]; then
         emit true "loaded $okn pinned module(s)"
     else
@@ -202,43 +189,59 @@ cmd_loadpins() {
 
 cmd_loadall() {
     sync_known
-    cnt=0; okn=0; failed=0; errs=""
-    for n in $(ordered_names); do
-        [ -f "$KMOD_DIR/$n.ko" ] || continue
-        is_loaded "$n" && continue
-        cnt=$((cnt + 1))
-        out=$("$MODPROBE" -d "$KMOD_DIR" "$n" 2>&1); rc=$?
-        if [ $rc -eq 0 ]; then okn=$((okn + 1)); else
-            failed=$((failed + 1)); errs="$errs $n"
-        fi
+    okn=0; errs=""
+    pass=0
+    while [ $pass -lt 3 ]; do
+        pass=$((pass + 1))
+        progress=0; errs=""
+        for n in $(ordered_names); do
+            [ -f "$KMOD_DIR/$n.ko" ] || continue
+            is_loaded "$n" && continue
+            if "$MODPROBE" -d "$KMOD_DIR" "$n" >/dev/null 2>&1; then
+                okn=$((okn + 1)); progress=1
+            else
+                errs="$errs $n"
+            fi
+        done
+        [ -z "$errs" ] && break
+        [ $progress -eq 0 ] && break
     done
-    log_action "loadall: $okn ok, $failed failed"
-    if [ $failed -eq 0 ]; then
+    if [ -z "$errs" ]; then
         emit true "loaded $okn module(s)"
     else
-        emit false "loaded $okn, failed $failed:$errs"
+        emit false "loaded $okn, failed:$errs"
     fi
-    [ $failed -eq 0 ]
+    [ -z "$errs" ]
 }
 
+# modules hold references to each other, so retry passes release dependents
+# first (e.g. sctp_diag keeps sctp busy) instead of giving up on first failure
 cmd_unloadall() {
-    cnt=0; okn=0; failed=0; errs=""
-    for n in $(ordered_names | reverse_lines); do
-        [ -f "$KMOD_DIR/$n.ko" ] || continue
-        is_loaded "$n" || continue
-        cnt=$((cnt + 1))
-        out=$("$MODPROBE" -r -d "$KMOD_DIR" "$n" 2>&1); rc=$?
-        if [ $rc -eq 0 ]; then okn=$((okn + 1)); else
-            failed=$((failed + 1)); errs="$errs $n"
-        fi
+    okn=0
+    pass=0
+    while [ $pass -lt 4 ]; do
+        pass=$((pass + 1))
+        progress=0
+        for n in $(ordered_names | reverse_lines); do
+            [ -f "$KMOD_DIR/$n.ko" ] || continue
+            is_loaded "$n" || continue
+            if "$MODPROBE" -r -d "$KMOD_DIR" "$n" >/dev/null 2>&1; then
+                okn=$((okn + 1)); progress=1
+            fi
+        done
+        [ $progress -eq 0 ] && break
     done
-    log_action "unloadall: $okn ok, $failed failed"
-    if [ $failed -eq 0 ]; then
+    remaining=""
+    for n in $(ordered_names); do
+        [ -f "$KMOD_DIR/$n.ko" ] || continue
+        is_loaded "$n" && remaining="$remaining $n"
+    done
+    if [ -z "$remaining" ]; then
         emit true "unloaded $okn module(s)"
-    else
-        emit false "unloaded $okn, still busy:$errs"
+        return 0
     fi
-    [ $failed -eq 0 ]
+    emit false "still in use:$remaining"
+    return 1
 }
 
 cmd_pinall() {
@@ -248,29 +251,17 @@ cmd_pinall() {
         is_pinned "$n" || printf '%s\n' "$n" >> "$PIN_FILE"
         grep -qxF -- "$n" "$KNOWN_FILE" || printf '%s\n' "$n" >> "$KNOWN_FILE"
     done
-    log_action "pinall"
     emit true "all modules pinned to boot"
 }
 
 cmd_unpinall() {
     : > "$PIN_FILE"
-    log_action "unpinall"
     emit true "boot pin list cleared"
 }
 
 cmd_sync() {
     sync_known
     emit true "module list synchronized"
-}
-
-cmd_logs() {
-    if [ -f "$ACT_LOG" ] && [ "$(wc -l < "$ACT_LOG")" -gt 500 ]; then
-        tail -n 300 "$ACT_LOG" > "$ACT_LOG.tmp" && mv "$ACT_LOG.tmp" "$ACT_LOG"
-    fi
-    printf '[actions]\n'
-    tail -n 80 "$ACT_LOG" 2>/dev/null
-    printf '\n[boot]\n'
-    tail -n 80 "$BOOT_LOG" 2>/dev/null
 }
 
 cmd_status() {
@@ -301,10 +292,9 @@ case "${1:-}" in
     pinall)     cmd_pinall ;;
     unpinall)   cmd_unpinall ;;
     sync)       cmd_sync ;;
-    logs)       cmd_logs ;;
     status)     cmd_status ;;
     *)
-        printf 'usage: %s {list|load <mod>|unload <mod>|pin <mod>|unpin <mod>|loadpins|loadall|unloadall|pinall|unpinall|sync|logs|status}\n' "$0" >&2
+        printf 'usage: %s {list|load <mod>|unload <mod>|pin <mod>|unpin <mod>|loadpins|loadall|unloadall|pinall|unpinall|sync|status}\n' "$0" >&2
         exit 2
         ;;
 esac

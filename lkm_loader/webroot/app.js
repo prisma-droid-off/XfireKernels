@@ -23,10 +23,7 @@
     loadAll: document.getElementById('load-all'),
     unloadAll: document.getElementById('unload-all'),
     pinAll: document.getElementById('pin-all'),
-    unpinAll: document.getElementById('unpin-all'),
-    logs: document.getElementById('logs'),
-    logsState: document.getElementById('logs-state'),
-    logsBody: document.getElementById('logs-body')
+    unpinAll: document.getElementById('unpin-all')
   };
 
   var state = { modules: [], total: 0, loaded: 0, pinned: 0, query: '' };
@@ -37,7 +34,6 @@
   var visTimer = null;
   var renderQueued = false;
   var entered = false;
-  var logFetched = 0;
   var refreshAgain = false;
   var refreshing = null;
 
@@ -115,36 +111,6 @@
     }
   }
 
-  var liveLines = [];
-  var persisted = '';
-
-  function stamp() {
-    var d = new Date();
-    var p = function (n) { return (n < 10 ? '0' : '') + n; };
-    return p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
-  }
-
-  function renderLog() {
-    var parts = [];
-    if (liveLines.length) parts.push('[this session]\n' + liveLines.join('\n'));
-    if (persisted) parts.push(persisted);
-    var text = parts.join('\n\n');
-    el.logsBody.textContent = text || 'No log output yet.';
-    el.logsBody.classList.toggle('idle', !text);
-    if (liveLines.length) {
-      el.logsState.textContent = 'live';
-    } else {
-      var n = text ? text.split('\n').length : 0;
-      el.logsState.textContent = n ? n + (n === 1 ? ' line' : ' lines') : 'empty';
-    }
-  }
-
-  function liveLog(ok, label, msg) {
-    liveLines.push('[' + stamp() + '] ' + (ok ? 'ok  ' : 'err ') + label + (msg ? ' · ' + msg : ''));
-    if (liveLines.length > 100) liveLines.shift();
-    renderLog();
-  }
-
   // ------------------------------------------------------------ data
 
   async function loadVersion() {
@@ -169,20 +135,6 @@
       if (state.modules[i].name === name) return state.modules[i];
     }
     return null;
-  }
-
-  async function loadLog(force) {
-    if (!hasKsu) return;
-    if (!force && Date.now() - logFetched < 2000) return;
-    if (!liveLines.length) el.logsState.textContent = '…';
-    try {
-      persisted = str(await exec(BIN + ' logs', 8000)).replace(/\s+$/, '');
-      logFetched = Date.now();
-      liveLines.length = 0;
-    } catch (e) {
-      persisted = 'Unable to read log: ' + (e.message || 'error');
-    }
-    renderLog();
   }
 
   // ------------------------------------------------------------ render
@@ -398,17 +350,14 @@
     if (row) row.classList.toggle('busy', !!value);
   }
 
-  async function runAction(fn, label) {
+  async function runAction(fn) {
     try {
       var res = await fn();
-      var ok = !(res && res.ok === false);
-      if (ok) toast((res && res.message) || 'Done');
-      else toast(res.message || 'Failed', true);
-      liveLog(ok, label, res && res.message);
+      if (res && res.ok === false) toast(res.message || 'Failed', true);
+      else toast((res && res.message) || 'Done');
       return res;
     } catch (e) {
       toast(e.message || String(e), true);
-      liveLog(false, label, e.message || String(e));
       return { ok: false };
     } finally {
       scheduleSync();
@@ -424,7 +373,7 @@
     setBusy(m.name, true);
     runAction(function () {
       return call((before ? 'unload ' : 'load ') + q(m.name), 60000, true);
-    }, (before ? 'unload ' : 'load ') + m.name).then(function (res) {
+    }).then(function (res) {
       if (res && res.ok === false) {
         m.loaded = before;
         state.loaded += before ? 1 : -1;
@@ -442,7 +391,7 @@
     setBusy(m.name, true);
     runAction(function () {
       return call((before ? 'unpin ' : 'pin ') + q(m.name), 30000, true);
-    }, (before ? 'unpin ' : 'pin ') + m.name).then(function (res) {
+    }).then(function (res) {
       if (res && res.ok === false) {
         m.pinned = before;
         state.pinned += before ? 1 : -1;
@@ -451,19 +400,47 @@
     }).then(function () { setBusy(m.name, false); });
   }
 
+  function recount() {
+    var l = 0, p = 0;
+    for (var i = 0; i < state.modules.length; i++) {
+      if (state.modules[i].loaded) l++;
+      if (state.modules[i].pinned) p++;
+    }
+    state.loaded = l;
+    state.pinned = p;
+  }
+
+  function applyBulk(args) {
+    var flag;
+    if (args === 'loadall' || args === 'unloadall') flag = 'loaded';
+    else if (args === 'pinall' || args === 'unpinall') flag = 'pinned';
+    if (flag) {
+      var v = args === 'loadall' || args === 'pinall';
+      for (var i = 0; i < state.modules.length; i++) state.modules[i][flag] = v;
+    } else if (args === 'loadpins') {
+      for (var j = 0; j < state.modules.length; j++) {
+        if (state.modules[j].pinned) state.modules[j].loaded = true;
+      }
+    }
+    recount();
+    scheduleRender();
+  }
+
   async function bulk(args, fallback) {
     var btns = document.querySelectorAll('.bulk button');
     Array.prototype.forEach.call(btns, function (b) { b.disabled = true; });
+    applyBulk(args);                      // instant feedback
+    var res = null;
     try {
-      var res = await call(args, 90000, true);
-      var ok = !(res && res.ok === false);
-      toast((res && res.message) || fallback, !ok);
-      liveLog(ok, args, res && res.message);
-      await refresh();
+      res = await call(args, 90000, true);
+      toast((res && res.message) || fallback, !!(res && res.ok === false));
     } catch (e) {
       toast(e.message || String(e), true);
-      liveLog(false, args, e.message || String(e));
     } finally {
+      var pins = args === 'pinall' || args === 'unpinall';
+      if (!pins || !res || res.ok === false) {
+        try { await refresh(); } catch (e) { /* keep optimistic view */ }
+      }
       Array.prototype.forEach.call(btns, function (b) { b.disabled = false; });
     }
   }
@@ -515,17 +492,10 @@
   el.pinAll.addEventListener('click', function () { bulk('pinall', 'Pinned all'); });
   el.unpinAll.addEventListener('click', function () { bulk('unpinall', 'Cleared pins'); });
 
-  el.logs.addEventListener('toggle', function () {
-    if (el.logs.open) loadLog(true);
-  });
-
   document.addEventListener('visibilitychange', function () {
     clearTimeout(visTimer);
     if (document.hidden) return;
-    visTimer = setTimeout(function () {
-      refresh();
-      if (el.logs.open) loadLog();
-    }, 150);
+    visTimer = setTimeout(refresh, 150);
   });
 
   window.addEventListener('error', function () {

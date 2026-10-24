@@ -34,7 +34,6 @@ Open the module card in **KernelSU** or **APatch** and tap **Open** / **WebUI**.
 | Load all | Load every shipped module now |
 | Unload all | Unload every loaded module (reverse dependency order) |
 | Pin all / Clear pins | Bulk-edit the boot list |
-| Logs | Live output of the current action plus persisted action and boot logs |
 
 Magisk does not support module WebUIs — use the CLI below.
 
@@ -58,11 +57,10 @@ sh /data/adb/modules/lkm_loader/bin/lkmctl unpinall
 sh /data/adb/modules/lkm_loader/bin/lkmctl loadpins    # load pinned set now
 sh /data/adb/modules/lkm_loader/bin/lkmctl loadall
 sh /data/adb/modules/lkm_loader/bin/lkmctl unloadall
-sh /data/adb/modules/lkm_loader/bin/lkmctl logs     # action + boot log tail
 sh /data/adb/modules/lkm_loader/bin/lkmctl status
 ```
 
-Only pinned modules load at boot. State lives in `/data/adb/lkm_loader/` (`known`, `pinned`, `boot.log`, `actions.log`); pins persist across reboots and updates, while load/unload actions are runtime-only and reset on reboot. The boot log is also available in the WebUI.
+Only pinned modules load at boot. State lives in `/data/adb/lkm_loader/` (`known`, `pinned`, `boot.log`); pins persist across reboots and updates, while load/unload actions are runtime-only and reset on reboot.
 
 ## Installation
 
