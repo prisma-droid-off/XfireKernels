@@ -12,6 +12,7 @@ STATE_DIR="${LKMCTL_STATE_DIR:-/data/adb/lkm_loader}"
 KNOWN_FILE="$STATE_DIR/known"
 PIN_FILE="$STATE_DIR/pinned"
 BOOT_LOG="$STATE_DIR/boot.log"
+ACT_LOG="$STATE_DIR/actions.log"
 PROC_MODULES="${LKMCTL_PROC_MODULES:-/proc/modules}"
 
 MODPROBE="${LKMCTL_MODPROBE:-$(command -v modprobe 2>/dev/null || true)}"
@@ -27,6 +28,11 @@ mkdir -p "$STATE_DIR" 2>/dev/null
 
 json_escape() {
     printf '%s' "$1" | tr '\n\r\t' '   ' | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'
+}
+
+log_action() {
+    msg=$(printf '%s' "$*" | tr '\n\r\t' '   ')
+    printf '%s | %s\n' "$(date +%H:%M:%S)" "$msg" >> "$ACT_LOG" 2>/dev/null || true
 }
 
 emit() {
@@ -75,13 +81,12 @@ ordered_names() {
 reverse_lines() { sed '1!G;h;$!d'; }
 
 # new modules are only recorded as known: nothing loads at boot until the
-# user pins it, and explicit pin choices persist across module updates
+# user pins it, and explicit pin choices persist across module updates.
+# one awk pass instead of grep per module keeps UI actions fast.
 sync_known() {
-    for f in "$KMOD_DIR"/*.ko; do
-        [ -e "$f" ] || continue
-        n=${f##*/}; n=${n%.ko}
-        grep -qxF -- "$n" "$KNOWN_FILE" || printf '%s\n' "$n" >> "$KNOWN_FILE"
-    done
+    n=$(wc -l < "$KNOWN_FILE" 2>/dev/null || echo 0)
+    all_names | awk -v n="$n" 'NR <= n { known[$0] = 1; next } !($0 in known)' \
+        "$KNOWN_FILE" - >> "$KNOWN_FILE"
 }
 
 valid_name() {
@@ -97,25 +102,24 @@ valid_name() {
 # ---------------------------------------------------------------------------
 
 cmd_list() {
-    sync_known
-    items=""
-    first=1
-    total=0
-    loaded=0
-    pinned=0
-    for f in "$KMOD_DIR"/*.ko; do
-        [ -e "$f" ] || continue
-        n=${f##*/}; n=${n%.ko}
-        total=$((total + 1))
-        ld=false; pn=false
-        if is_loaded "$n"; then ld=true; loaded=$((loaded + 1)); fi
-        if is_pinned "$n"; then pn=true; pinned=$((pinned + 1)); fi
-        [ $first -eq 1 ] || items="$items,"
-        first=0
-        items="$items{\"name\":\"$(json_escape "$n")\",\"loaded\":$ld,\"pinned\":$pn}"
-    done
-    printf '{"modules":[%s],"total":%d,"loaded":%d,"pinned":%d}\n' \
-        "$items" "$total" "$loaded" "$pinned"
+    all_names | awk -v pin="$PIN_FILE" -v proc="$PROC_MODULES" '
+        BEGIN {
+            while ((getline line < pin) > 0) if (line != "") p[line] = 1
+            while ((getline line < proc) > 0) {
+                split(line, f, " ")
+                n = f[1]; gsub(/-/, "_", n); ld[n] = 1
+            }
+        }
+        {
+            key = $0; gsub(/-/, "_", key)
+            total++
+            pl = ($0 in p); ll = (key in ld)
+            if (pl) pinned++
+            if (ll) loaded++
+            items = items (total > 1 ? "," : "") "{\"name\":\"" $0 "\",\"loaded\":" (ll ? "true" : "false") ",\"pinned\":" (pl ? "true" : "false") "}"
+        }
+        END { printf "{\"modules\":[%s],\"total\":%d,\"loaded\":%d,\"pinned\":%d}\n", items, total + 0, loaded + 0, pinned + 0 }
+    '
 }
 
 cmd_load() {
@@ -124,8 +128,10 @@ cmd_load() {
     if is_loaded "$n"; then emit true "$n is already loaded"; return 0; fi
     out=$("$MODPROBE" -d "$KMOD_DIR" "$n" 2>&1); rc=$?
     if [ $rc -eq 0 ]; then
+        log_action "load $n: ok"
         emit true "loaded $n"
     else
+        log_action "load $n: failed: $out"
         emit false "failed to load $n: $out"
     fi
     return $rc
@@ -137,8 +143,10 @@ cmd_unload() {
     if ! is_loaded "$n"; then emit true "$n is not loaded"; return 0; fi
     out=$("$MODPROBE" -r -d "$KMOD_DIR" "$n" 2>&1); rc=$?
     if [ $rc -eq 0 ]; then
+        log_action "unload $n: ok"
         emit true "unloaded $n"
     else
+        log_action "unload $n: failed: $out"
         emit false "failed to unload $n (in use?): $out"
     fi
     return $rc
@@ -148,6 +156,7 @@ cmd_pin() {
     n=${1:-}
     valid_name "$n" || { emit false "module not found: ${n:-?}"; return 1; }
     is_pinned "$n" || printf '%s\n' "$n" >> "$PIN_FILE"
+    log_action "pin $n"
     emit true "$n pinned to boot"
 }
 
@@ -158,6 +167,7 @@ cmd_unpin() {
         grep -vxF -- "$n" "$PIN_FILE" > "$PIN_FILE.tmp" 2>/dev/null
         mv "$PIN_FILE.tmp" "$PIN_FILE"
     fi
+    log_action "unpin $n"
     emit true "$n removed from boot"
 }
 
@@ -181,6 +191,7 @@ cmd_loadpins() {
             printf 'fail %s: %s\n' "$n" "$out" >> "$BOOT_LOG"
         fi
     done
+    log_action "loadpins: $okn ok, $failed failed"
     if [ $failed -eq 0 ]; then
         emit true "loaded $okn pinned module(s)"
     else
@@ -201,6 +212,7 @@ cmd_loadall() {
             failed=$((failed + 1)); errs="$errs $n"
         fi
     done
+    log_action "loadall: $okn ok, $failed failed"
     if [ $failed -eq 0 ]; then
         emit true "loaded $okn module(s)"
     else
@@ -220,6 +232,7 @@ cmd_unloadall() {
             failed=$((failed + 1)); errs="$errs $n"
         fi
     done
+    log_action "unloadall: $okn ok, $failed failed"
     if [ $failed -eq 0 ]; then
         emit true "unloaded $okn module(s)"
     else
@@ -235,17 +248,29 @@ cmd_pinall() {
         is_pinned "$n" || printf '%s\n' "$n" >> "$PIN_FILE"
         grep -qxF -- "$n" "$KNOWN_FILE" || printf '%s\n' "$n" >> "$KNOWN_FILE"
     done
+    log_action "pinall"
     emit true "all modules pinned to boot"
 }
 
 cmd_unpinall() {
     : > "$PIN_FILE"
+    log_action "unpinall"
     emit true "boot pin list cleared"
 }
 
 cmd_sync() {
     sync_known
     emit true "module list synchronized"
+}
+
+cmd_logs() {
+    if [ -f "$ACT_LOG" ] && [ "$(wc -l < "$ACT_LOG")" -gt 500 ]; then
+        tail -n 300 "$ACT_LOG" > "$ACT_LOG.tmp" && mv "$ACT_LOG.tmp" "$ACT_LOG"
+    fi
+    printf '[actions]\n'
+    tail -n 80 "$ACT_LOG" 2>/dev/null
+    printf '\n[boot]\n'
+    tail -n 80 "$BOOT_LOG" 2>/dev/null
 }
 
 cmd_status() {
@@ -276,9 +301,10 @@ case "${1:-}" in
     pinall)     cmd_pinall ;;
     unpinall)   cmd_unpinall ;;
     sync)       cmd_sync ;;
+    logs)       cmd_logs ;;
     status)     cmd_status ;;
     *)
-        printf 'usage: %s {list|load <mod>|unload <mod>|pin <mod>|unpin <mod>|loadpins|loadall|unloadall|pinall|unpinall|sync|status}\n' "$0" >&2
+        printf 'usage: %s {list|load <mod>|unload <mod>|pin <mod>|unpin <mod>|loadpins|loadall|unloadall|pinall|unpinall|sync|logs|status}\n' "$0" >&2
         exit 2
         ;;
 esac

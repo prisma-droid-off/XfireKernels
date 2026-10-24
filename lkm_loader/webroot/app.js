@@ -4,7 +4,6 @@
   var MODDIR = '/data/adb/modules/lkm_loader';
   var BIN = MODDIR + '/bin/lkmctl';
   var PROPFILE = MODDIR + '/module.prop';
-  var LOGFILE = '/data/adb/lkm_loader/boot.log';
 
   var hasKsu = typeof ksu !== 'undefined' && typeof ksu.exec === 'function';
 
@@ -63,23 +62,26 @@
     return Promise.race([p, guard]).finally(function () { clearTimeout(t); });
   }
 
-  // one shell call at a time: prevents flooding the root bridge and keeps
-  // the WebView responsive even when buttons are tapped quickly
-  var execChain = Promise.resolve();
+  // background reads (list/log) are serialized; user actions run immediately
+  var bgChain = Promise.resolve();
 
-  function exec(cmd, ms) {
+  function execOn(kind, cmd, ms) {
     if (!hasKsu) return Promise.reject(new Error('KernelSU API unavailable'));
     var run = function () {
       return withTimeout(
         Promise.resolve().then(function () { return ksu.exec(cmd); }),
         ms || 15000,
-        'command'
+        kind + ' command'
       );
     };
-    var p = execChain.then(run, run);
-    execChain = p.then(function () {}, function () {});
+    if (kind === 'user') return run();
+    var p = bgChain.then(run, run);
+    bgChain = p.then(function () {}, function () {});
     return p;
   }
+
+  function exec(cmd, ms) { return execOn('bg', cmd, ms); }
+  function execUser(cmd, ms) { return execOn('user', cmd, ms); }
 
   function str(res) {
     if (typeof res === 'string') return res;
@@ -87,8 +89,8 @@
     return '';
   }
 
-  async function call(args, ms) {
-    var text = str(await exec('sh ' + BIN + ' ' + args, ms)).trim();
+  async function call(args, ms, user) {
+    var text = str(await (user ? execUser : exec)(BIN + ' ' + args, ms)).trim();
     if (!text) return { ok: true, message: '' };
     try {
       var v = JSON.parse(text.split('\n').pop());
@@ -111,6 +113,36 @@
     if (isError && hasKsu && typeof ksu.toast === 'function') {
       try { ksu.toast(msg); } catch (e) { /* ignore */ }
     }
+  }
+
+  var liveLines = [];
+  var persisted = '';
+
+  function stamp() {
+    var d = new Date();
+    var p = function (n) { return (n < 10 ? '0' : '') + n; };
+    return p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
+  }
+
+  function renderLog() {
+    var parts = [];
+    if (liveLines.length) parts.push('[this session]\n' + liveLines.join('\n'));
+    if (persisted) parts.push(persisted);
+    var text = parts.join('\n\n');
+    el.logsBody.textContent = text || 'No log output yet.';
+    el.logsBody.classList.toggle('idle', !text);
+    if (liveLines.length) {
+      el.logsState.textContent = 'live';
+    } else {
+      var n = text ? text.split('\n').length : 0;
+      el.logsState.textContent = n ? n + (n === 1 ? ' line' : ' lines') : 'empty';
+    }
+  }
+
+  function liveLog(ok, label, msg) {
+    liveLines.push('[' + stamp() + '] ' + (ok ? 'ok  ' : 'err ') + label + (msg ? ' · ' + msg : ''));
+    if (liveLines.length > 100) liveLines.shift();
+    renderLog();
   }
 
   // ------------------------------------------------------------ data
@@ -142,20 +174,15 @@
   async function loadLog(force) {
     if (!hasKsu) return;
     if (!force && Date.now() - logFetched < 2000) return;
-    el.logsBody.textContent = 'Loading…';
+    if (!liveLines.length) el.logsState.textContent = '…';
     try {
-      var txt = str(await exec("tail -n 200 '" + LOGFILE + "' 2>/dev/null", 8000))
-        .replace(/\s+$/, '');
+      persisted = str(await exec(BIN + ' logs', 8000)).replace(/\s+$/, '');
       logFetched = Date.now();
-      var lines = txt ? txt.split('\n').length : 0;
-      el.logsBody.textContent = txt || 'No boot activity logged yet.';
-      el.logsBody.classList.toggle('idle', !txt);
-      el.logsState.textContent = lines ? lines + (lines === 1 ? ' line' : ' lines') : 'empty';
+      liveLines.length = 0;
     } catch (e) {
-      el.logsBody.textContent = 'Unable to read log: ' + (e.message || 'error');
-      el.logsBody.classList.remove('idle');
-      el.logsState.textContent = 'error';
+      persisted = 'Unable to read log: ' + (e.message || 'error');
     }
+    renderLog();
   }
 
   // ------------------------------------------------------------ render
@@ -332,6 +359,14 @@
   }
 
   // coalesce refreshes: overlapping calls are folded into one extra pass
+  var syncTimer = null;
+
+  // reconcile counts in the background; never delays the action itself
+  function scheduleSync() {
+    clearTimeout(syncTimer);
+    syncTimer = setTimeout(function () { refresh(); }, 900);
+  }
+
   function refresh() {
     if (refreshing) {
       refreshAgain = true;
@@ -363,18 +398,20 @@
     if (row) row.classList.toggle('busy', !!value);
   }
 
-  async function runAction(fn) {
+  async function runAction(fn, label) {
     try {
       var res = await fn();
-      if (res && res.ok === false) toast(res.message || 'Failed', true);
-      else toast((res && res.message) || 'Done');
+      var ok = !(res && res.ok === false);
+      if (ok) toast((res && res.message) || 'Done');
+      else toast(res.message || 'Failed', true);
+      liveLog(ok, label, res && res.message);
       return res;
     } catch (e) {
       toast(e.message || String(e), true);
+      liveLog(false, label, e.message || String(e));
       return { ok: false };
     } finally {
-      refresh();
-      if (el.logs.open) loadLog(true);
+      scheduleSync();
     }
   }
 
@@ -386,8 +423,8 @@
 
     setBusy(m.name, true);
     runAction(function () {
-      return call((before ? 'unload ' : 'load ') + q(m.name));
-    }).then(function (res) {
+      return call((before ? 'unload ' : 'load ') + q(m.name), 60000, true);
+    }, (before ? 'unload ' : 'load ') + m.name).then(function (res) {
       if (res && res.ok === false) {
         m.loaded = before;
         state.loaded += before ? 1 : -1;
@@ -404,8 +441,8 @@
 
     setBusy(m.name, true);
     runAction(function () {
-      return call((before ? 'unpin ' : 'pin ') + q(m.name));
-    }).then(function (res) {
+      return call((before ? 'unpin ' : 'pin ') + q(m.name), 30000, true);
+    }, (before ? 'unpin ' : 'pin ') + m.name).then(function (res) {
       if (res && res.ok === false) {
         m.pinned = before;
         state.pinned += before ? 1 : -1;
@@ -418,12 +455,14 @@
     var btns = document.querySelectorAll('.bulk button');
     Array.prototype.forEach.call(btns, function (b) { b.disabled = true; });
     try {
-      var res = await call(args, 60000);
-      toast((res && res.message) || fallback, !!(res && res.ok === false));
+      var res = await call(args, 90000, true);
+      var ok = !(res && res.ok === false);
+      toast((res && res.message) || fallback, !ok);
+      liveLog(ok, args, res && res.message);
       await refresh();
-      if (el.logs.open) loadLog(true);
     } catch (e) {
       toast(e.message || String(e), true);
+      liveLog(false, args, e.message || String(e));
     } finally {
       Array.prototype.forEach.call(btns, function (b) { b.disabled = false; });
     }
