@@ -24,6 +24,21 @@ on_install() {
   [ -f /data/adb/lkm_loader/pinned ] || : > /data/adb/lkm_loader/pinned
 
   chmod 755 "$MODPATH/bin/lkmctl"
+
+  # older builds auto-pinned every shipped module; drop that legacy state so
+  # the default is "nothing pinned" while real user choices are preserved
+  legacy=1; any=0
+  for f in "$MODPATH"/system/vendor/lib/modules/custom/*.ko; do
+    [ -e "$f" ] || continue
+    any=1
+    n=${f##*/}; n=${n%.ko}
+    grep -qxF -- "$n" /data/adb/lkm_loader/pinned 2>/dev/null || { legacy=0; break; }
+  done
+  if [ "$any" = "1" ] && [ "$legacy" = "1" ]; then
+    : > /data/adb/lkm_loader/pinned
+    ui_print "- Cleared legacy auto-pinned list (all modules start unpinned)."
+  fi
+
   # register shipped modules; nothing is pinned/loaded by default
   "$MODPATH/bin/lkmctl" sync >&2
 

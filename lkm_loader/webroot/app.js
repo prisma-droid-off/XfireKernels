@@ -4,6 +4,7 @@
   var MODDIR = '/data/adb/modules/lkm_loader';
   var BIN = MODDIR + '/bin/lkmctl';
   var PROPFILE = MODDIR + '/module.prop';
+  var LOGFILE = '/data/adb/lkm_loader/boot.log';
 
   var hasKsu = typeof ksu !== 'undefined' && typeof ksu.exec === 'function';
 
@@ -20,17 +21,26 @@
     pinned: document.getElementById('sum-pinned'),
     ver: document.getElementById('ver'),
     loadPinned: document.getElementById('load-pinned'),
+    loadAll: document.getElementById('load-all'),
     unloadAll: document.getElementById('unload-all'),
     pinAll: document.getElementById('pin-all'),
-    unpinAll: document.getElementById('unpin-all')
+    unpinAll: document.getElementById('unpin-all'),
+    logs: document.getElementById('logs'),
+    logsState: document.getElementById('logs-state'),
+    logsBody: document.getElementById('logs-body')
   };
 
   var state = { modules: [], total: 0, loaded: 0, pinned: 0, query: '' };
   var rows = Object.create(null);
   var busy = Object.create(null);
   var toastTimer = null;
+  var searchTimer = null;
+  var visTimer = null;
   var renderQueued = false;
   var entered = false;
+  var logFetched = 0;
+  var refreshAgain = false;
+  var refreshing = null;
 
   var PIN_OUTLINE =
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" ' +
@@ -45,26 +55,51 @@
 
   // ------------------------------------------------------------ shell
 
-  async function exec(cmd) {
-    if (!hasKsu) throw new Error('KernelSU API unavailable');
-    var res = await ksu.exec(cmd);
+  function withTimeout(p, ms, label) {
+    var t;
+    var guard = new Promise(function (_, reject) {
+      t = setTimeout(function () { reject(new Error(label + ' timed out')); }, ms);
+    });
+    return Promise.race([p, guard]).finally(function () { clearTimeout(t); });
+  }
+
+  // one shell call at a time: prevents flooding the root bridge and keeps
+  // the WebView responsive even when buttons are tapped quickly
+  var execChain = Promise.resolve();
+
+  function exec(cmd, ms) {
+    if (!hasKsu) return Promise.reject(new Error('KernelSU API unavailable'));
+    var run = function () {
+      return withTimeout(
+        Promise.resolve().then(function () { return ksu.exec(cmd); }),
+        ms || 15000,
+        'command'
+      );
+    };
+    var p = execChain.then(run, run);
+    execChain = p.then(function () {}, function () {});
+    return p;
+  }
+
+  function str(res) {
     if (typeof res === 'string') return res;
     if (res && typeof res.stdout === 'string') return res.stdout;
     return '';
   }
 
+  async function call(args, ms) {
+    var text = str(await exec('sh ' + BIN + ' ' + args, ms)).trim();
+    if (!text) return { ok: true, message: '' };
+    try {
+      var v = JSON.parse(text.split('\n').pop());
+      if (v && typeof v === 'object') return v;
+    } catch (e) { /* plain output */ }
+    return { ok: true, message: text };
+  }
+
   function q(name) {
     if (!/^[A-Za-z0-9_.+@-]+$/.test(name)) throw new Error('Invalid module name');
     return "'" + name + "'";
-  }
-
-  async function call(args) {
-    var out = await exec('sh ' + BIN + ' ' + args);
-    try {
-      return JSON.parse(out.trim());
-    } catch (e) {
-      return { ok: true, message: out.trim() };
-    }
   }
 
   function toast(msg, isError) {
@@ -82,13 +117,13 @@
 
   async function loadVersion() {
     try {
-      var v = (await exec("awk -F= '$1==\"version\"{print $2; exit}' " + PROPFILE) || '').trim();
+      var v = (await exec("awk -F= '$1==\"version\"{print $2; exit}' " + PROPFILE, 8000) || '').trim();
       el.ver.textContent = 'Custom LKM Loader' + (v ? ' · v' + v : '');
     } catch (e) { /* non-fatal */ }
   }
 
   async function loadList() {
-    var data = await call('list');
+    var data = await call('list', 20000);
     if (!data || !Array.isArray(data.modules)) throw new Error('Unexpected response');
     state.modules = data.modules;
     state.total = data.total;
@@ -104,6 +139,25 @@
     return null;
   }
 
+  async function loadLog(force) {
+    if (!hasKsu) return;
+    if (!force && Date.now() - logFetched < 2000) return;
+    el.logsBody.textContent = 'Loading…';
+    try {
+      var txt = str(await exec("tail -n 200 '" + LOGFILE + "' 2>/dev/null", 8000))
+        .replace(/\s+$/, '');
+      logFetched = Date.now();
+      var lines = txt ? txt.split('\n').length : 0;
+      el.logsBody.textContent = txt || 'No boot activity logged yet.';
+      el.logsBody.classList.toggle('idle', !txt);
+      el.logsState.textContent = lines ? lines + (lines === 1 ? ' line' : ' lines') : 'empty';
+    } catch (e) {
+      el.logsBody.textContent = 'Unable to read log: ' + (e.message || 'error');
+      el.logsBody.classList.remove('idle');
+      el.logsState.textContent = 'error';
+    }
+  }
+
   // ------------------------------------------------------------ render
 
   function scheduleRender() {
@@ -111,7 +165,7 @@
     renderQueued = true;
     requestAnimationFrame(function () {
       renderQueued = false;
-      render();
+      try { render(); } catch (e) { /* never break the UI loop */ }
     });
   }
 
@@ -120,7 +174,7 @@
   }
 
   function setText(node, text) {
-    if (node.textContent !== text) node.textContent = text;
+    if (node && node.textContent !== text) node.textContent = text;
   }
 
   function createRow(name) {
@@ -198,35 +252,33 @@
     var visible = state.modules.filter(matches);
     var hasModules = state.modules.length > 0;
 
-    // summary
     setText(el.total, String(state.total));
     setText(el.loaded, String(state.loaded));
     setText(el.pinned, String(state.pinned));
 
-    // empty state
     var showEmpty = !hasModules || visible.length === 0;
-    if (el.empty.hidden === showEmpty) {
-      if (!hasModules) {
-        el.empty.querySelector('p').textContent = 'No modules';
-        el.empty.querySelector('span').innerHTML =
-          'Place <code>.ko</code> files in <code>/vendor/lib/modules/custom</code>';
-      } else {
-        el.empty.querySelector('p').textContent = 'No matches';
-        el.empty.querySelector('span').textContent = 'Nothing matches "' + state.query + '"';
-      }
-    }
-    if (el.empty.hidden !== !showEmpty) el.empty.hidden = !showEmpty;
-    if (el.list.hidden !== showEmpty) el.list.hidden = showEmpty;
-
     if (showEmpty) {
+      var p = el.empty.querySelector('p');
+      var hint = el.empty.querySelector('span');
+      if (!hasModules) {
+        setText(p, 'No modules');
+        hint.innerHTML = 'Place <code>.ko</code> files in <code>/vendor/lib/modules/custom</code>';
+      } else {
+        setText(p, 'No matches');
+        setText(hint, 'Nothing matches "' + state.query + '"');
+      }
       for (var key in rows) {
-        if (!rows[key].parentNode) { delete rows[key]; continue; }
-        rows[key].parentNode.removeChild(rows[key]);
+        if (rows[key].parentNode) rows[key].parentNode.removeChild(rows[key]);
         delete rows[key];
       }
+      el.list.hidden = true;
       el.list.setAttribute('aria-busy', 'false');
+      el.empty.hidden = false;
       return;
     }
+
+    el.list.hidden = false;
+    el.empty.hidden = true;
 
     var skeleton = el.list.querySelector('.skeleton');
     if (skeleton) skeleton.remove();
@@ -249,7 +301,6 @@
       prev = row;
     }
 
-    // drop rows that are no longer visible
     for (var name in rows) {
       if (!seen[name]) {
         if (rows[name].parentNode) rows[name].parentNode.removeChild(rows[name]);
@@ -265,6 +316,43 @@
     }
 
     el.list.setAttribute('aria-busy', 'false');
+  }
+
+  // ------------------------------------------------------------ refresh
+
+  function showLoadError(e) {
+    if (!state.modules.length) {
+      el.list.hidden = true;
+      el.list.setAttribute('aria-busy', 'false');
+      el.empty.hidden = false;
+      setText(el.empty.querySelector('p'), 'Unable to read modules');
+      setText(el.empty.querySelector('span'), 'Check that the module is installed and active.');
+    }
+    toast(e.message || 'Failed to load modules', true);
+  }
+
+  // coalesce refreshes: overlapping calls are folded into one extra pass
+  function refresh() {
+    if (refreshing) {
+      refreshAgain = true;
+      return refreshing;
+    }
+    el.refresh.classList.add('busy');
+    refreshing = (async function () {
+      do {
+        refreshAgain = false;
+        try {
+          await loadList();
+        } catch (e) {
+          showLoadError(e);
+          break;
+        }
+      } while (refreshAgain);
+    })().finally(function () {
+      refreshing = null;
+      el.refresh.classList.remove('busy');
+    });
+    return refreshing;
   }
 
   // ------------------------------------------------------------ actions
@@ -285,7 +373,8 @@
       toast(e.message || String(e), true);
       return { ok: false };
     } finally {
-      loadList().catch(function () { /* keep current view */ });
+      refresh();
+      if (el.logs.open) loadLog(true);
     }
   }
 
@@ -300,7 +389,7 @@
       return call((before ? 'unload ' : 'load ') + q(m.name));
     }).then(function (res) {
       if (res && res.ok === false) {
-        m.loaded = before;              // revert
+        m.loaded = before;
         state.loaded += before ? 1 : -1;
         scheduleRender();
       }
@@ -309,7 +398,7 @@
 
   function togglePin(m) {
     var before = !!m.pinned;
-    m.pinned = !before;                 // optimistic
+    m.pinned = !before;
     state.pinned += m.pinned ? 1 : -1;
     scheduleRender();
 
@@ -325,36 +414,18 @@
     }).then(function () { setBusy(m.name, false); });
   }
 
-  async function refresh() {
-    el.refresh.classList.add('busy');
-    if (!el.list.firstChild) el.list.setAttribute('aria-busy', 'true');
-    try {
-      await loadList();
-    } catch (e) {
-      el.list.textContent = '';
-      rows = Object.create(null);
-      el.list.setAttribute('aria-busy', 'false');
-      el.list.hidden = true;
-      el.empty.hidden = false;
-      el.empty.querySelector('p').textContent = 'Unable to read modules';
-      el.empty.querySelector('span').textContent = 'Check that the module is installed and active.';
-      toast(e.message || 'Failed to load modules', true);
-    } finally {
-      el.refresh.classList.remove('busy');
-    }
-  }
-
   async function bulk(args, fallback) {
-    var group = el.loadPinned.parentNode.querySelectorAll('button');
-    group.forEach(function (b) { b.disabled = true; });
+    var btns = document.querySelectorAll('.bulk button');
+    Array.prototype.forEach.call(btns, function (b) { b.disabled = true; });
     try {
-      var res = await call(args);
-      toast((res && res.message) || fallback, res && res.ok === false);
-      await loadList();
+      var res = await call(args, 60000);
+      toast((res && res.message) || fallback, !!(res && res.ok === false));
+      await refresh();
+      if (el.logs.open) loadLog(true);
     } catch (e) {
       toast(e.message || String(e), true);
     } finally {
-      group.forEach(function (b) { b.disabled = false; });
+      Array.prototype.forEach.call(btns, function (b) { b.disabled = false; });
     }
   }
 
@@ -371,7 +442,6 @@
     else if (btn.classList.contains('pin')) togglePin(m);
   });
 
-  var searchTimer = null;
   el.search.addEventListener('input', function () {
     var v = el.search.value.trim().toLowerCase();
     el.clear.hidden = !v;
@@ -399,14 +469,28 @@
     }
   });
 
-  el.refresh.addEventListener('click', refresh);
+  el.refresh.addEventListener('click', function () { refresh(); });
   el.loadPinned.addEventListener('click', function () { bulk('loadpins', 'Loaded pinned'); });
+  el.loadAll.addEventListener('click', function () { bulk('loadall', 'Loaded all'); });
   el.unloadAll.addEventListener('click', function () { bulk('unloadall', 'Unloaded all'); });
   el.pinAll.addEventListener('click', function () { bulk('pinall', 'Pinned all'); });
   el.unpinAll.addEventListener('click', function () { bulk('unpinall', 'Cleared pins'); });
 
+  el.logs.addEventListener('toggle', function () {
+    if (el.logs.open) loadLog(true);
+  });
+
   document.addEventListener('visibilitychange', function () {
-    if (!document.hidden) refresh();
+    clearTimeout(visTimer);
+    if (document.hidden) return;
+    visTimer = setTimeout(function () {
+      refresh();
+      if (el.logs.open) loadLog();
+    }, 150);
+  });
+
+  window.addEventListener('error', function () {
+    toast('The WebUI hit an error — reopen it if the page looks stale', true);
   });
 
   // ------------------------------------------------------------ boot
@@ -415,8 +499,8 @@
     el.noApi.hidden = false;
     el.list.hidden = true;
     el.empty.hidden = true;
-    [el.refresh, el.search, el.loadPinned, el.unloadAll, el.pinAll, el.unpinAll]
-      .forEach(function (n) { n.disabled = true; });
+    [el.refresh, el.search, el.loadPinned, el.loadAll, el.unloadAll, el.pinAll, el.unpinAll]
+      .forEach(function (n) { if (n) n.disabled = true; });
     return;
   }
 

@@ -31,8 +31,10 @@ Open the module card in **KernelSU** or **APatch** and tap **Open** / **WebUI**.
 | Switch | Load / unload the module immediately |
 | Pin icon | Include / exclude the module from boot loading |
 | Load pinned | Load every pinned module now |
+| Load all | Load every shipped module now |
 | Unload all | Unload every loaded module (reverse dependency order) |
 | Pin all / Clear pins | Bulk-edit the boot list |
+| Boot log | Expand to read the latest boot loading results |
 
 Magisk does not support module WebUIs — use the CLI below.
 
@@ -59,12 +61,14 @@ sh /data/adb/modules/lkm_loader/bin/lkmctl unloadall
 sh /data/adb/modules/lkm_loader/bin/lkmctl status
 ```
 
-Only pinned modules load at boot. State lives in `/data/adb/lkm_loader/` (`known`, `pinned`, `boot.log`) and survives module updates; load/unload actions are runtime-only and reset on reboot.
+Only pinned modules load at boot. State lives in `/data/adb/lkm_loader/` (`known`, `pinned`, `boot.log`); pins persist across reboots and updates, while load/unload actions are runtime-only and reset on reboot. The boot log is also available in the WebUI.
 
 ## Installation
 
 1. Flash the module zip in Magisk / KernelSU / APatch.
-2. Reboot — nothing loads automatically yet; pin the modules you want to boot.
+2. Reboot — nothing loads automatically; all modules start unpinned.
+   Older builds auto-pinned everything on install, so upgrading clears that
+   legacy list once, while your own pin choices are kept.
 3. Open the WebUI (or use the CLI) to customise the set.
 
 For GKI kernels that also ship modules in `vendor_boot`, flash the matching `vendor_boot.img` right after installing the module — see below.

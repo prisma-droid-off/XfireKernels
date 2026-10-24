@@ -39,6 +39,8 @@
     <nav class="bulk" aria-label="Bulk actions">
       <button class="link" id="load-pinned" type="button">Load pinned</button>
       <span class="sep" aria-hidden="true"></span>
+      <button class="link" id="load-all" type="button">Load all</button>
+      <span class="sep" aria-hidden="true"></span>
       <button class="link" id="unload-all" type="button">Unload all</button>
       <span class="sep" aria-hidden="true"></span>
       <button class="link" id="pin-all" type="button">Pin all</button>
@@ -60,6 +62,14 @@
     <div id="no-api" class="notice" hidden>
       Open this page from KernelSU or APatch to control modules.
     </div>
+
+    <details id="logs" class="logs">
+      <summary>
+        <span>Boot log</span>
+        <span id="logs-state" class="logs-state">tap to view</span>
+      </summary>
+      <pre id="logs-body" tabindex="0">No boot activity logged yet.</pre>
+    </details>
 
     <footer class="foot">
       <span id="ver">Custom LKM Loader</span>
