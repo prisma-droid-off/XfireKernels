@@ -215,43 +215,25 @@ jobs:
       - name: Generate Changelog
         env:
           VER: ${{ steps.version.outputs.kernel_version }}
-          REPO: ${{ github.repository }}
         run: |
-          COMMITMSG=$(git log -1 --pretty=format:'- [`%h`](https://github.com/${{ github.repository }}/commit/%H) %s (built from)' 2>/dev/null || echo "- *(commit information unavailable)*")
+          COMMITMSG=$(git log -1 --pretty=format:'[`%h`](https://github.com/${{ github.repository }}/commit/%H) %s' 2>/dev/null || echo "commit unavailable")
           awk -v ver="${VER}" -v date="$(date +%Y-%m-%d)" -v commit="${COMMITMSG}" '
             { gsub(/__VERSION__/, ver)
               gsub(/__DATE__/, date)
               if (/__COMMITS__/) { print commit } else { print } }' <<'CHLOG' > lkm_loader/changelog.md
-          # Custom LKM Loader — XfireKernels
+          # Custom LKM Loader
 
-          > Dynamic loadable kernel module (LKM) loader for Magisk / KernelSU / APatch.
-          > Base module by [ravindu644](https://github.com/ravindu644) · Maintained by [@prisma-droid-off](https://github.com/prisma-droid-off).
+          **v__VERSION__** · __DATE__
+
+          - Rebuilt from the latest XfireKernels kernel tree
+          - Load, unload and pin modules from the WebUI
+
+          Flash `XfireKernels_v__VERSION__.zip`, then `Custom-LKM-Loader-__VERSION__.zip`, and reboot.
 
           ---
 
-          ## v__VERSION__
-
-          **Release date:** __DATE__
-
-          ### Source Commit
           __COMMITS__
-
-          ### Overview
-          This release refreshes the bundled custom LKMs (vendor / `vendor_dlkm` modules) shipped with the latest XfireKernels build, keeping your device's kernel modules in sync with the newest kernel Image.
-
-          ### Notes
-          - Module metadata (`module.prop`, `update.json`) is synchronized automatically by CI on every build.
-          - Requires the matching XfireKernels AnyKernel3 image (`XfireKernels_v__VERSION__.zip`) to be flashed first.
-
-          ### Installation
-          1. Flash the matching XfireKernels kernel image.
-          2. Flash `Custom-LKM-Loader-v__VERSION__.zip` in Magisk / KernelSU / APatch.
-          3. Reboot and verify modules load via `modprobe`.
-
-          ---
-
-          ## Support
-          For issues and updates, see the [XfireKernels repository](https://github.com/prisma-droid-off/XfireKernels) or open a GitHub issue.
+          @prisma_alt · credits ravindu644
           CHLOG
           echo "Generated lkm_loader/changelog.md for v${VER}"
 

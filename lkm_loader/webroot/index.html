@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#000000">
+<title>LKM Loader</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="app">
+    <header class="head">
+      <div>
+        <h1>LKM Loader</h1>
+        <p id="summary" class="summary">
+          <span id="sum-total">–</span> modules
+          <i>·</i>
+          <span id="sum-loaded">–</span> loaded
+          <i>·</i>
+          <span id="sum-pinned">–</span> on boot
+        </p>
+      </div>
+      <button id="refresh" class="icon" type="button" aria-label="Refresh">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M20.5 12a8.5 8.5 0 1 1-2.5-6"/><path d="M20.5 4.5V9H16"/>
+        </svg>
+      </button>
+    </header>
+
+    <div class="search">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true">
+        <circle cx="11" cy="11" r="6.5"/><path d="m19.5 19.5-3.7-3.7"/>
+      </svg>
+      <input id="search" type="search" placeholder="Search modules" autocomplete="off" spellcheck="false" aria-label="Search modules">
+      <button id="clear-search" class="clear" type="button" aria-label="Clear search" hidden>&times;</button>
+    </div>
+
+    <nav class="bulk" aria-label="Bulk actions">
+      <button class="link" id="load-pinned" type="button">Load pinned</button>
+      <span class="sep" aria-hidden="true"></span>
+      <button class="link" id="unload-all" type="button">Unload all</button>
+      <span class="sep" aria-hidden="true"></span>
+      <button class="link" id="pin-all" type="button">Pin all</button>
+      <span class="sep" aria-hidden="true"></span>
+      <button class="link" id="unpin-all" type="button">Clear pins</button>
+    </nav>
+
+    <section id="list" class="list" aria-live="polite" aria-busy="true">
+      <div class="skeleton">
+        <div class="sk"></div><div class="sk"></div><div class="sk"></div>
+      </div>
+    </section>
+
+    <div id="empty" class="empty" hidden>
+      <p>No modules</p>
+      <span>Place <code>.ko</code> files in <code>/vendor/lib/modules/custom</code></span>
+    </div>
+
+    <div id="no-api" class="notice" hidden>
+      Open this page from KernelSU or APatch to control modules.
+    </div>
+
+    <footer class="foot">
+      <span id="ver">Custom LKM Loader</span>
+      <span><b>@prisma_alt</b> · credits <b>ravindu644</b></span>
+    </footer>
+  </main>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script src="app.js"></script>
+</body>
+</html>
