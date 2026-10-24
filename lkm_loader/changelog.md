@@ -1,13 +1,13 @@
 # Custom LKM Loader
 
-**v1.30** · 2026-10-24
+**v1.31** · 2026-10-24
 
 - Rebuilt from the latest XfireKernels kernel tree
 - Load, unload and pin modules from the WebUI
 
-Flash `XfireKernels_v1.30.zip`, then `Custom-LKM-Loader-1.30.zip`, and reboot.
+Flash `XfireKernels_v1.31.zip`, then `Custom-LKM-Loader-1.31.zip`, and reboot.
 
 ---
 
-[`8e4345354`](https://github.com/prisma-droid-off/XfireKernels/commit/8e434535418e75414a18e5ee8e7882fdb76e0297) lkm_loader: unpinned default, load-all button, boot log viewer
+[`62d2258f5`](https://github.com/prisma-droid-off/XfireKernels/commit/62d2258f58cbad9e19639c5929b350e54138e383) lkm_loader: live action log and faster toggles
 @prisma_alt · credits ravindu644
