@@ -22,7 +22,23 @@ custom_modules=(
     "ip_set_hash_ip.ko"
     "ip_set_hash_net.ko"
     "btrfs.ko"
-    
+    "vxlan.ko"
+    "nf_tables.ko"
+    "nft_masq.ko"
+    "nft_ct.ko"
+    "nft_fib_ipv4.ko"
+    "nft_fib_ipv6.ko"
+    "nft_fib.ko"
+    "cls_cgroup.ko"
+    "unix_diag.ko"
+    "af_packet_diag.ko"
+    "netlink_diag.ko"
+    "xt_set.ko"
+    "xt_ipvs.ko"
+    "xt_CHECKSUM.ko"
+    "xt_recent.ko"
+    "xt_LOG.ko"
+    "xt_addrtype.ko"
 )
 
 # Loop through the array properly
