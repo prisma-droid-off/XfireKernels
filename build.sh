@@ -14,7 +14,7 @@ set -euo pipefail
 #  SETTINGS -- the only part you normally need to touch
 # ---------------------------------------------------------------------------
 DEFCONFIG="s5e8535-m14xnsxx_defconfig"      # name from arch/arm64/configs (also: vendor/foo_defconfig)
-EXTRA_CONFIGS=(custom.config)               # fragments merged on top, e.g. (custom.config)
+EXTRA_CONFIGS=(abi_safe.config)               # fragments merged on top, e.g. (custom.config)
 KERNEL_IMAGE="Image"           # Image | Image.gz | Image.gz-dtb  (MediaTek needs Image.gz)
 USE_OUT_DIR=1                  # 0 = build in-tree; most Samsung Exynos trees need 0
 MENUCONFIG=0                   # 0 = skip the menuconfig GUI
