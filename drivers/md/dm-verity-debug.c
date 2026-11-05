@@ -273,7 +273,7 @@ int verity_handle_err_hex_debug(struct dm_verity *v, enum verity_block_type type
     }
 
     DMERR("%s: %s block %llu is corrupted (dm: %s)",
-          v->data_dev->name, type_str, block, dm_disk(md)->disk_name);
+          v->data_dev->name, type_str, block, dm_device_name(md));
 
     for(i=0 ; i < v->salt_size; i++){
         sprintf(hex_str + (i * 2), "%02x", *(v->salt + i));
@@ -315,15 +315,18 @@ out:
     if (v->mode == DM_VERITY_MODE_LOGGING)
         return 0;
 
-    if (v->mode == DM_VERITY_MODE_RESTART) {
-#ifdef CONFIG_DM_VERITY_AVB
-        dm_verity_avb_error_handler();
-#endif
-        kernel_restart("dm-verity device corrupted");
+    /*
+     * Android builds the APEX verity tables with restart_on_corruption,
+     * and some tables may request panic_on_corruption.  A single bad
+     * APEX block must fail the read, not take down the whole phone:
+     * keep the device alive so the bad APEX can be identified and
+     * regenerated.
+     */
+    if (v->mode == DM_VERITY_MODE_RESTART || v->mode == DM_VERITY_MODE_PANIC) {
+        DMERR("%s: verity mode %d requested a reboot; returning EIO instead",
+              v->data_dev->name, v->mode);
+        return 1;
     }
-
-    if (v->mode == DM_VERITY_MODE_PANIC)
-        panic("dm-verity device corrupted");
 
     return 1;
 }
