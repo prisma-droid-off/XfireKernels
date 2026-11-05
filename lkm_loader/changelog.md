@@ -1,13 +1,13 @@
 # Custom LKM Loader
 
-**v1.36** · 2026-11-05
+**v1.37** · 2026-11-05
 
 - Rebuilt from the latest XfireKernels kernel tree
 - Load, unload and pin modules from the WebUI
 
-Flash `XfireKernels_v1.36.zip`, then `Custom-LKM-Loader-1.36.zip`, and reboot.
+Flash `XfireKernels_v1.37.zip`, then `Custom-LKM-Loader-1.37.zip`, and reboot.
 
 ---
 
-[`9d5c11186`](https://github.com/prisma-droid-off/XfireKernels/commit/9d5c11186e114ee82b245c5b1eb05896287456a5) add abi safe config
+[`187761fb3`](https://github.com/prisma-droid-off/XfireKernels/commit/187761fb3fa9ca1352c4113b71435de5f8491204) Merge branch 'main' of https://github.com/prisma-droid-off/XfireKernels  ok
 @prisma_alt · credits ravindu644
