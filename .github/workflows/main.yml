@@ -61,12 +61,13 @@ jobs:
           echo "Latest tag: ${LATEST_TAG:-none} -> New version: ${NEW_VERSION}"
           echo "kernel_version=${NEW_VERSION}" >> "$GITHUB_OUTPUT"
 
-      - name: Sync KernelSU (latest upstream main)
+      - name: Use pinned KernelSU submodule
         run: |
           set -euo pipefail
-          cd KernelSU
-          git fetch --unshallow --tags origin || git fetch --tags origin
-          git checkout --detach origin/main
+          # Keep CI identical to build.sh: build the KernelSU commit pinned in
+          # this repository instead of silently tracking BakaSU's latest main.
+          git submodule update --init --recursive KernelSU
+          git -C KernelSU rev-parse HEAD
 
       - name: Cache Gradle (boot editor)
         uses: actions/cache@v4

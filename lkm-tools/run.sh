@@ -1,7 +1,7 @@
 #!/usr/bin/bash
 
 # Fix variable assignment (remove spaces)
-home="$GITHUB_WORKSPACE"
+home="${GITHUB_WORKSPACE:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 MODDIR=$(ls -d "$home"/out/staging/lib/modules/*/ | head -n1)
 
 rm -fr built_dlkm built_vendor prepare_dlkm custom_dlkm

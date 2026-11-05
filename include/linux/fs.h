@@ -1024,7 +1024,7 @@ struct file {
 	ANDROID_KABI_RESERVE(1);
 	ANDROID_KABI_RESERVE(2);
 } __randomize_layout
-  __attribute__((aligned(8)));
+  __attribute__((aligned(4)));
 
 struct file_handle {
 	__u32 handle_bytes;

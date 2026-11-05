@@ -272,7 +272,8 @@ int verity_handle_err_hex_debug(struct dm_verity *v, enum verity_block_type type
         print_fc_blks_list();
     }
 
-    DMERR("%s: %s block %llu is corrupted", v->data_dev->name, type_str, block);
+    DMERR("%s: %s block %llu is corrupted (dm: %s)",
+          v->data_dev->name, type_str, block, dm_disk(md)->disk_name);
 
     for(i=0 ; i < v->salt_size; i++){
         sprintf(hex_str + (i * 2), "%02x", *(v->salt + i));
@@ -295,8 +296,13 @@ int verity_handle_err_hex_debug(struct dm_verity *v, enum verity_block_type type
         DMERR("%s: %s block : Unknown block type", v->data_dev->name, type_str);
     }
 
-    panic("dmv corrupt");
-
+    /*
+     * Do not panic unconditionally.  The default dm-verity mode is EIO,
+     * so a single corrupt block (for example in an APEX or container
+     * image backed by a loop device) must fail the read instead of
+     * rebooting the whole device.  Only panic if the table explicitly
+     * requested panic_on_corruption.
+     */
     if (v->corrupted_errs == DM_VERITY_MAX_CORRUPTED_ERRS)
         DMERR("%s: reached maximum errors", v->data_dev->name);
 
@@ -315,6 +321,9 @@ out:
 #endif
         kernel_restart("dm-verity device corrupted");
     }
+
+    if (v->mode == DM_VERITY_MODE_PANIC)
+        panic("dm-verity device corrupted");
 
     return 1;
 }
